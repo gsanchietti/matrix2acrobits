@@ -1,0 +1,150 @@
+openapi: 3.0.0
+info:
+  title: matrix2acrobits
+  version: 1.0.0
+  description: API proxy to adapt Acrobits Cloud Softphone to Matrix.
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+paths:
+  /api/client/fetch_messages:
+    post:
+      summary: Fetch Messages (Modern API)
+      operationId: fetchMessages
+      description: |
+        Checks for new incoming messages and synchronizes message history.
+        Maps to Matrix /sync.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - username
+                - password
+              properties:
+                username:
+                  type: string
+                  description: Matrix username (localpart or full ID).
+                password:
+                  type: string
+                  description: Matrix password.
+                last_id:
+                  type: string
+                  description: The sms_id of the last received message. Used for pagination/sync.
+                last_sent_id:
+                  type: string
+                  description: The sms_id of the last sent message.
+                device:
+                  type: string
+                  description: Device identifier.
+      responses:
+        '200':
+          description: Successful sync
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  date:
+                    type: string
+                    format: date-time
+                    description: Current server time in RFC 3339.
+                  received_smss:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Message'
+                  sent_smss:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Message'
+        '401':
+          description: Authentication failed against Matrix server.
+  
+  /api/client/send_message:
+    post:
+      summary: Send Message
+      operationId: sendMessage
+      description: |
+        Sends an outgoing message. Maps to Matrix /send.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - from
+                - password
+                - sms_to
+                - sms_body
+              properties:
+                from:
+                  type: string
+                  description: Matrix username of the sender.
+                password:
+                  type: string
+                  description: Matrix password.
+                sms_to:
+                  type: string
+                  description: Recipient Matrix ID or phone number (if bridged).
+                sms_body:
+                  type: string
+                  description: The message content.
+                content_type:
+                  type: string
+                  default: text/plain
+                disposition_notification:
+                  type: string
+                  description: Opaque string for read receipts.
+      responses:
+        '200':
+          description: Message sent successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sms_id:
+                    type: string
+                    description: The Matrix event ID of the sent message.
+        '400':
+          description: Invalid request or Matrix error.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    description: Error description.
+
+components:
+  schemas:
+    Message:
+      type: object
+      properties:
+        sms_id:
+          type: string
+          description: Unique identifier (Matrix Event ID).
+        sending_date:
+          type: string
+          format: date-time
+          description: RFC 3339 timestamp.
+        sender:
+          type: string
+          description: Sender address/ID.
+        recipient:
+          type: string
+          description: Recipient address/ID.
+        sms_text:
+          type: string
+          description: Message body.
+        content_type:
+          type: string
+          description: MIME type.
+        stream_id:
+          type: string
+          description: Identifier for the conversation stream (Room ID).
+
