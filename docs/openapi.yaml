@@ -120,6 +120,71 @@ paths:
                     type: string
                     description: Error description.
 
+  /api/internal/map_sms_to_matrix:
+    post:
+      summary: Register or update an SMS-to-Matrix mapping
+      description: |
+        Creates or overwrites the mapping between an SMS number (or bridged identifier) and
+        a Matrix room for a super-admin. Requires the `X-Super-Admin-Token` header and is
+        only accessible from localhost.
+      parameters:
+        - in: header
+          name: X-Super-Admin-Token
+          schema:
+            type: string
+          required: true
+          description: Super admin token for authentication.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MappingRequest'
+      responses:
+        '200':
+          description: Mapping acknowledged
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MappingResponse'
+        '400':
+          description: Invalid request payload.
+        '401':
+          description: Invalid admin token.
+        '403':
+          description: Mapping API only available from localhost.
+    get:
+      summary: Lookup an existing mapping
+      description: |
+        Returns the stored Matrix handler for a previously mapped SMS number. Requires the
+        `X-Super-Admin-Token` header and must be called from localhost.
+      parameters:
+        - in: header
+          name: X-Super-Admin-Token
+          schema:
+            type: string
+          required: true
+          description: Super admin token for authentication.
+        - in: query
+          name: sms_number
+          schema:
+            type: string
+          required: true
+          description: The SMS number or identifier previously mapped.
+      responses:
+        '200':
+          description: Mapping found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MappingResponse'
+        '401':
+          description: Invalid admin token.
+        '403':
+          description: Mapping API only available from localhost.
+        '404':
+          description: No mapping exists for the requested identifier.
+
 components:
   schemas:
     Message:
@@ -147,4 +212,32 @@ components:
         stream_id:
           type: string
           description: Identifier for the conversation stream (Room ID).
+    MappingRequest:
+      type: object
+      required:
+        - sms_number
+        - room_id
+      properties:
+        sms_number:
+          type: string
+          description: SMS number or bridged identifier to map.
+        matrix_id:
+          type: string
+          description: Optional Matrix user to use when auto-creating DMs.
+        room_id:
+          type: string
+          description: Matrix room ID where the mapped identifier should route messages.
+    MappingResponse:
+      type: object
+      properties:
+        sms_number:
+          type: string
+        matrix_id:
+          type: string
+        room_id:
+          type: string
+        updated_at:
+          type: string
+          format: date-time
+          description: When the mapping was last written.
 
