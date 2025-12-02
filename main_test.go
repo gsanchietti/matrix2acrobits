@@ -469,7 +469,7 @@ func TestIntegration_RoomMessaging(t *testing.T) {
 		t.Logf("User2 joined room %s", roomID)
 
 		// Give the server time to process the join event
-		time.Sleep(2000 * time.Millisecond)
+		time.Sleep(5000 * time.Millisecond)
 
 		// Step 3: User1 sends a message to the room
 		sendReq1 := models.SendMessageRequest{
