@@ -1,0 +1,35 @@
+name: Tests
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+
+jobs:
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.24'
+
+      - name: Install system dependencies (podman, jq, curl)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y podman jq curl
+
+      - name: Ensure test script is executable
+        run: |
+          chmod +x test/test.sh
+
+      - name: Run integration test harness
+        env:
+          RUN_INTEGRATION_TESTS: 1
+        run: |
+          pushd test
+          ./test.sh run
+          popd

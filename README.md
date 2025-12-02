@@ -51,10 +51,19 @@ Next, add the path to your registration file to your Synapse `homeserver.yaml`:
 
 ```yaml
 app_service_config_files:
-  - "/path/to/your/acrobits-proxy.yaml"
+  - "/data/config/acrobits-proxy.yaml"
 ```
 
 Finally, **restart your Synapse server** to load the new configuration.
+
+### 3. dex_config.yaml
+
+Add this do the end of the config file:
+```yaml
+oauth2:
+  skipApprovalScreen: true
+  passwordConnector: ldap
+```
 
 ## Proxy Configuration & Running
 
@@ -101,24 +110,100 @@ These endpoints are for managing the service and are protected. Access requires 
 
 Integration tests verify the end-to-end functionality of the proxy by interacting with a live Matrix homeserver.
 
+### Option 1: Local Testing with Podman Compose (Recommended)
+
+This option brings up an entire local Matrix stack (OpenLDAP → Dex → Synapse) that mirrors the NethServer deployment described in the `homeserver.yaml` and `dex_config.yaml` files.
+
 **Prerequisites:**
 
-- A running Synapse homeserver configured as described in the "Synapse Configuration" section, with the Application Service correctly loaded and permissions granted.
-- The `test.env` file (located in the project root) populated with valid Matrix user credentials and homeserver details for the test users.
+- Podman and Podman Compose installed (rootless mode works out of the box)
+- Go 1.23+ installed
+- `curl` command-line tool
+
+**Quick Start:**
+
+1.  **Run the setup script:**
+    ```shell
+    ./setup-local-testing.sh
+    ```
+    This will:
+    - Generate a Synapse configuration if missing and add the application-service wiring
+    - Provision OpenLDAP by running `ghcr.io/nethserver/openldap-server:latest new-domain` with the same environment variables used in `podman-compose.yaml` (the script creates `lenv` and launches the one-shot `podman run -ti --rm --env-file ./lenv --volume=openldap_data:/var/lib/openldap:z ... new-domain` command)
+    - Start OpenLDAP (port 10389), Dex (port 20053), and Synapse (ports 8008/20054)
+    - Create the `test.env` file with the synthetic user credentials used by the integration tests
+
+2.  **Run the integration tests:**
+    ```shell
+    ./run-tests.sh
+    ```
+
+3.  **View the stack logs (optional):**
+    ```shell
+    podman-compose -f podman-compose.yaml logs -f synapse
+    podman-compose -f podman-compose.yaml logs -f dex
+    podman-compose -f podman-compose.yaml logs -f openldap
+    ```
+
+4.  **Clean up when done:**
+    ```shell
+    ./cleanup-local-testing.sh
+    ```
+
+**What the Setup Includes:**
+
+- OpenLDAP instance seeded with `dc=ldap1,dc=local`, managed via `ghcr.io/nethserver/openldap-server`
+- Dex OIDC provider configured from `dex_config.yaml`, pointing to the embedded LDAP backend
+- Synapse homeserver using `homeserver.yaml` to glue Dex and Application Service registration together
+- SQLite-backed Synapse data (`synapse_data` volume)
+- Rootless Podman support and pre-configured test users (giacomo & mario)
+
+### Option 2: Remote Testing with External Synapse
+
+If you prefer to test against an existing Synapse installation:
+
+**Prerequisites:**
+
+- A running Synapse homeserver configured as described in the "Synapse Configuration" section
+- The Application Service correctly loaded and permissions granted
+- The `test.env` file (located in the project root) populated with valid Matrix user credentials and homeserver details
 
 **How to Run:**
 
-1.  **Set Environment Variables:** Ensure `MATRIX_HOMESERVER_URL` and `SUPER_ADMIN_TOKEN` are set (as described in "Proxy Configuration"). Additionally, set `AS_USER_ID` and `RUN_INTEGRATION_TESTS` as follows:
-    ```shell
-    export AS_USER_ID="@_acrobits_proxy:your-homeserver-name.com" # Replace with your actual AS user ID
-    export RUN_INTEGRATION_TESTS=1
+1.  **Set Environment Variables:** Create a `test.env` file with the following content:
     ```
-2.  **Execute Tests:**
-    ```shell
-    go test -v ./...
+    MATRIX_HOMESERVER_URL=https://matrix.your-homeserver-name.com
+    SUPER_ADMIN_TOKEN=your_application_service_token
+    AS_USER_ID=@_acrobits_proxy:your-homeserver-name.com
+    USER1=username1
+    USER1_PASSWORD=password1
+    USER1_NUMBER=+1001001000
+    USER2=username2
+    USER2_PASSWORD=password2
+    USER2_NUMBER=+1002002000
     ```
 
-**Note:** These tests are dependent on a live external service and may be flaky if the network is unstable or the server is misconfigured. Due to the external nature of these tests, potential failures might indicate issues with the Synapse server setup rather than the proxy code.
+2.  **Execute Tests:**
+    ```shell
+    export RUN_INTEGRATION_TESTS=1
+    go test -v ./internal/integration
+    ```
+
+**Note:** Remote tests are dependent on a live external service and may be flaky if the network is unstable or the server is misconfigured. Due to the external nature of these tests, potential failures might indicate issues with the Synapse server setup rather than the proxy code.
+
+### Running Specific Tests
+
+To run only specific integration tests:
+
+```shell
+# Run only the send and fetch messages test
+go test -v ./internal/integration -run TestIntegration_SendAndFetchMessages
+
+# Run only the room messaging test
+go test -v ./internal/integration -run TestIntegration_RoomMessaging
+
+# Run only the mapping API test
+go test -v ./internal/integration -run TestIntegration_MappingAPI
+```
 
 
 ## Acrobits documentation

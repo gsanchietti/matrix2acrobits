@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/gsanchietti/matrix2acrobits/internal/service"
-	"github.com/gsanchietti/matrix2acrobits/pkg/models"
+	"github.com/gsanchietti/matrix2acrobits/models"
+	"github.com/gsanchietti/matrix2acrobits/service"
 	"github.com/labstack/echo/v4"
 )
 

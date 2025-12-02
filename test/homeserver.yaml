@@ -1,0 +1,72 @@
+server_name: localhost
+pid_file: /data/homeserver.pid
+public_baseurl: http://synapse.localhost/
+
+# Load application service registrations placed into /data
+app_service_config_files:
+  - /data/acrobits-proxy.yaml
+
+listeners:
+  - port: 8008
+    tls: false
+    type: http
+    x_forwarded: true
+    bind_addresses: ['0.0.0.0']
+    resources:
+      - names: [client]
+
+database:
+  name: sqlite3
+  args:
+    database: /tmp/homeserver.db
+
+log_config: "/data/config/log.config"
+
+media_store_path: /tmp/media_store
+uploads_path: /tmp/uploads
+
+max_upload_size: 50M
+max_image_pixels: 32M
+
+dynamic_thumbnails: false
+
+url_preview_enabled: false
+
+enable_registration: false
+
+# Shared secret used for offline user registration in tests
+registration_shared_secret: "test-shared-secret"
+
+report_stats: false
+
+macaroon_secret_key: macaron-secret
+form_secret: form-secret
+signing_key_path: "/tmp/synapse.localhost.signing.key"
+
+
+# Email configuration for notifications
+email:
+  enable_notifs: false
+  smtp_host: "localhost"
+  smtp_port: 25
+  smtp_user: ""
+  smtp_pass: ""
+  require_transport_security: false
+  notif_from: "no-reply@localhost"
+  app_name: "Matrix Chat"
+
+# OIDC/Dex configuration removed for simplified local tests
+
+suppress_key_server_warning: true
+
+rc_login:
+  address:
+    per_second: 100
+    burst_count: 100
+  account:
+    per_second: 100
+    burst_count: 100
+  failed_attempts:
+    per_second: 100
+    burst_count: 100
+

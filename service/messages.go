@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gsanchietti/matrix2acrobits/internal/matrix"
-	"github.com/gsanchietti/matrix2acrobits/pkg/models"
+	"github.com/gsanchietti/matrix2acrobits/matrix"
+	"github.com/gsanchietti/matrix2acrobits/models"
 	"maunium.net/go/mautrix"
 	"maunium.net/go/mautrix/event"
 	"maunium.net/go/mautrix/id"

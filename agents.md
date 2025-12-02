@@ -71,8 +71,15 @@ pkg/models/       # Shared structs (Acrobits request/response objects)
 
 ### Integration Tests
 
-- Spin up a mock Matrix server based on container.
-- Test the full HTTP flow: Request → Proxy → Mock Matrix → Response.
+- Spin up a mock Matrix server based on container:
+  ```
+  cd test
+  ./test.sh run
+  ```
+- Tear down after tests:
+  ```
+  ./test.sh stop
+  ```
 
 ---
 

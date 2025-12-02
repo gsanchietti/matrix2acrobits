@@ -1,4 +1,4 @@
-package integration
+package main
 
 import (
 	"bufio"
@@ -14,29 +14,40 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gsanchietti/matrix2acrobits/internal/api"
-	"github.com/gsanchietti/matrix2acrobits/internal/matrix"
-	"github.com/gsanchietti/matrix2acrobits/internal/service"
-	"github.com/gsanchietti/matrix2acrobits/pkg/models"
+	"github.com/gsanchietti/matrix2acrobits/api"
+	"github.com/gsanchietti/matrix2acrobits/matrix"
+	"github.com/gsanchietti/matrix2acrobits/models"
+	"github.com/gsanchietti/matrix2acrobits/service"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"maunium.net/go/mautrix/id"
 )
 
-const testEnvFile = "../../test.env"
+const testEnvFile = "test/test.env"
 const testServerPort = "18080"
 
 type testConfig struct {
 	homeserverURL string
 	serverName    string
 	adminToken    string
-	asUserID      id.UserID
 	user1         string
 	user1Password string
 	user1Number   string
 	user2         string
 	user2Password string
 	user2Number   string
+	asUser        string
+}
+
+var runIntegrationTests bool
+
+func TestMain(m *testing.M) {
+	if os.Getenv("RUN_INTEGRATION_TESTS") != "" {
+		runIntegrationTests = true
+	} else {
+		runIntegrationTests = false
+	}
+	os.Exit(m.Run())
 }
 
 func loadTestEnv() (*testConfig, error) {
@@ -75,14 +86,13 @@ func loadTestEnv() (*testConfig, error) {
 			cfg.user2Password = value
 		case "USER2_NUMBER":
 			cfg.user2Number = value
+		case "AS_USER_ID":
+			cfg.asUser = value
 		}
 	}
 	if err := scanner.Err(); err != nil {
 		return nil, err
 	}
-
-	// Also load from environment for values not in the file
-	cfg.asUserID = id.UserID(os.Getenv("AS_USER_ID"))
 
 	u, err := url.Parse(cfg.homeserverURL)
 	if err != nil {
@@ -90,11 +100,23 @@ func loadTestEnv() (*testConfig, error) {
 	}
 	cfg.serverName = u.Hostname()
 
+	// If we're pointing at a local homeserver (localhost), try to read the
+	// application service registration in `test/acrobits-proxy.yaml` and use
+	// its `as_token` so tests authenticate with the same token Synapse expects.
+	if strings.Contains(cfg.homeserverURL, "localhost") {
+		if token, err := readASTokenFromRegistration("test/acrobits-proxy.yaml"); err == nil && token != "" {
+			cfg.adminToken = token
+		}
+	}
+
 	return cfg, nil
 }
 
 func checkTestEnv(t *testing.T) *testConfig {
 	t.Helper()
+	if !runIntegrationTests {
+		t.Skip("RUN_INTEGRATION_TESTS not set; skipping integration tests")
+	}
 	if _, err := os.Stat(testEnvFile); os.IsNotExist(err) {
 		t.Skip("test.env not found, skipping integration tests")
 	}
@@ -102,7 +124,7 @@ func checkTestEnv(t *testing.T) *testConfig {
 	if err != nil {
 		t.Fatalf("failed to load test.env: %v", err)
 	}
-	if cfg.homeserverURL == "" || cfg.adminToken == "" || cfg.user1 == "" || cfg.asUserID == "" {
+	if cfg.homeserverURL == "" || cfg.adminToken == "" || cfg.user1 == "" || cfg.asUser == "" {
 		t.Fatal("test.env or environment missing required fields (homeserver, token, user, AS_USER_ID)")
 	}
 	return cfg
@@ -117,8 +139,8 @@ func startTestServer(cfg *testConfig) (*echo.Echo, error) {
 
 	matrixClient, err := matrix.NewClient(matrix.Config{
 		HomeserverURL: cfg.homeserverURL,
+		AsUserID:      id.UserID(cfg.asUser),
 		AsToken:       cfg.adminToken,
-		AsUserID:      cfg.asUserID,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("initialize matrix client: %w", err)
@@ -186,12 +208,69 @@ func doRequest(method, url string, body interface{}, headers map[string]string) 
 	return resp, respBody, nil
 }
 
+// fetchMessagesWithRetry calls the proxy fetch_messages endpoint repeatedly until
+// the response parses successfully or the timeout elapses. It returns the last
+// parsed response (may be empty) and any final error.
+func fetchMessagesWithRetry(t *testing.T, baseURL, username string, timeout time.Duration) (models.FetchMessagesResponse, error) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	var lastResp models.FetchMessagesResponse
+	var lastErr error
+	for time.Now().Before(deadline) {
+		fetchReq := models.FetchMessagesRequest{
+			Username: username,
+			LastID:   "",
+		}
+		resp, body, err := doRequest("POST", baseURL+"/api/client/fetch_messages", fetchReq, nil)
+		if err != nil {
+			lastErr = err
+			time.Sleep(300 * time.Millisecond)
+			continue
+		}
+		if resp.StatusCode != http.StatusOK {
+			lastErr = fmt.Errorf("expected 200, got %d: %s", resp.StatusCode, string(body))
+			time.Sleep(300 * time.Millisecond)
+			continue
+		}
+		if err := json.Unmarshal(body, &lastResp); err != nil {
+			lastErr = err
+			time.Sleep(300 * time.Millisecond)
+			continue
+		}
+		return lastResp, nil
+	}
+	if lastErr == nil {
+		lastErr = fmt.Errorf("fetch messages timed out after %s", timeout)
+	}
+	return lastResp, lastErr
+}
+
 // Helper to get localpart from username like `user@domain.com`
 func getLocalpart(username string) string {
 	if idx := strings.Index(username, "@"); idx != -1 {
 		return username[:idx]
 	}
 	return username
+}
+
+// readASTokenFromRegistration tries to read `as_token` from the provided YAML
+// file. This is a lightweight parser since the file is small and format-known.
+func readASTokenFromRegistration(path string) (string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	lines := strings.Split(string(data), "\n")
+	for _, l := range lines {
+		line := strings.TrimSpace(l)
+		if strings.HasPrefix(line, "as_token:") {
+			parts := strings.SplitN(line, ":", 2)
+			if len(parts) == 2 {
+				return strings.Trim(strings.TrimSpace(parts[1]), "\"'"), nil
+			}
+		}
+	}
+	return "", nil
 }
 
 func TestIntegration_SendAndFetchMessages(t *testing.T) {
@@ -243,25 +322,9 @@ func TestIntegration_SendAndFetchMessages(t *testing.T) {
 
 	// Step 2: Fetch messages as USER2 to confirm receipt
 	t.Run("FetchMessages", func(t *testing.T) {
-		// Wait for message to propagate
-		time.Sleep(2 * time.Second)
-
-		fetchReq := models.FetchMessagesRequest{
-			Username: user2MatrixID,
-			LastID:   "",
-		}
-
-		resp, body, err := doRequest("POST", baseURL+"/api/client/fetch_messages", fetchReq, nil)
+		fetchResp, err := fetchMessagesWithRetry(t, baseURL, user2MatrixID, 10*time.Second)
 		if err != nil {
-			t.Fatalf("request failed: %v", err)
-		}
-		if resp.StatusCode != http.StatusOK {
-			t.Fatalf("expected 200, got %d: %s", resp.StatusCode, string(body))
-		}
-
-		var fetchResp models.FetchMessagesResponse
-		if err := json.Unmarshal(body, &fetchResp); err != nil {
-			t.Fatalf("failed to parse response: %v", err)
+			t.Fatalf("fetch messages failed: %v", err)
 		}
 
 		found := false
@@ -383,7 +446,7 @@ func TestIntegration_RoomMessaging(t *testing.T) {
 		// Step 1: Create a room as user1
 		matrixClient, err := matrix.NewClient(matrix.Config{
 			HomeserverURL: cfg.homeserverURL,
-			AsUserID:      cfg.asUserID,
+			AsUserID:      id.UserID(cfg.asUser),
 			AsToken:       cfg.adminToken,
 		})
 		if err != nil {
@@ -405,6 +468,9 @@ func TestIntegration_RoomMessaging(t *testing.T) {
 		}
 		t.Logf("User2 joined room %s", roomID)
 
+		// Give the server time to process the join event
+		time.Sleep(2000 * time.Millisecond)
+
 		// Step 3: User1 sends a message to the room
 		sendReq1 := models.SendMessageRequest{
 			From:    user1MatrixID,
@@ -424,8 +490,8 @@ func TestIntegration_RoomMessaging(t *testing.T) {
 		}
 		t.Logf("User1 message sent: %s", sendResp1.SMSID)
 
-		// Wait for message propagation
-		time.Sleep(1 * time.Second)
+		// Wait for message propagation and use a retrying fetch to make
+		// assertions robust to delivery latency.
 
 		// Step 4: User2 sends a message to the room
 		sendReq2 := models.SendMessageRequest{
@@ -446,25 +512,13 @@ func TestIntegration_RoomMessaging(t *testing.T) {
 		}
 		t.Logf("User2 message sent: %s", sendResp2.SMSID)
 
-		// Wait for message propagation
-		time.Sleep(1 * time.Second)
+		// Wait for message propagation and use a retrying fetch to make
+		// assertions robust to delivery latency.
 
 		// Step 5: User1 fetches messages and should see user2's message
-		fetchReq1 := models.FetchMessagesRequest{
-			Username: user1MatrixID,
-			LastID:   "",
-		}
-		resp, body, err = doRequest("POST", baseURL+"/api/client/fetch_messages", fetchReq1, nil)
+		fetchResp1, err := fetchMessagesWithRetry(t, baseURL, user1MatrixID, 10*time.Second)
 		if err != nil {
-			t.Fatalf("request failed: %v", err)
-		}
-		if resp.StatusCode != http.StatusOK {
-			t.Fatalf("expected 200, got %d: %s", resp.StatusCode, string(body))
-		}
-
-		var fetchResp1 models.FetchMessagesResponse
-		if err := json.Unmarshal(body, &fetchResp1); err != nil {
-			t.Fatalf("failed to parse response: %v", err)
+			t.Fatalf("fetch messages failed: %v", err)
 		}
 
 		// Check that user1 sees the message from user2
@@ -481,21 +535,9 @@ func TestIntegration_RoomMessaging(t *testing.T) {
 		}
 
 		// Step 6: User2 fetches messages and should see both their own and user1's messages
-		fetchReq2 := models.FetchMessagesRequest{
-			Username: user2MatrixID,
-			LastID:   "",
-		}
-		resp, body, err = doRequest("POST", baseURL+"/api/client/fetch_messages", fetchReq2, nil)
+		fetchResp2, err := fetchMessagesWithRetry(t, baseURL, user2MatrixID, 10*time.Second)
 		if err != nil {
-			t.Fatalf("request failed: %v", err)
-		}
-		if resp.StatusCode != http.StatusOK {
-			t.Fatalf("expected 200, got %d: %s", resp.StatusCode, string(body))
-		}
-
-		var fetchResp2 models.FetchMessagesResponse
-		if err := json.Unmarshal(body, &fetchResp2); err != nil {
-			t.Fatalf("failed to parse response: %v", err)
+			t.Fatalf("fetch messages failed: %v", err)
 		}
 
 		// Check that user2 sees the message from user1

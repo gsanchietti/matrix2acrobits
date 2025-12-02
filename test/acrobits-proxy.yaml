@@ -1,0 +1,20 @@
+# Registration file for the Acrobits Proxy Application Service
+id: acrobits-proxy
+# The URL where Synapse can reach your proxy.
+# For now, this is not used, but it's a required field.
+url: http://localhost:8080
+# The token the application service (your proxy) will use to authenticate with Synapse.
+# This should match the SUPER_ADMIN_TOKEN environment variable for the proxy.
+as_token: admin-token
+# The token the homeserver (Synapse) will use to authenticate with your proxy.
+hs_token: synapse-token
+# The localpart of the 'bot' user for this application service.
+sender_localpart: _acrobits_proxy
+# This section grants the application service the power to control (impersonate) users.
+namespaces:
+  users:
+    - exclusive: false
+      # This regex gives the proxy control over all users on your homeserver
+      regex: '@.*'
+  aliases: []
+  rooms: []
