@@ -4,9 +4,9 @@ import (
 	"log"
 	"os"
 
-	"github.com/gsanchietti/matrix2acrobits/api"
-	"github.com/gsanchietti/matrix2acrobits/matrix"
-	"github.com/gsanchietti/matrix2acrobits/service"
+	"github.com/nethesis/matrix2acrobits/api"
+	"github.com/nethesis/matrix2acrobits/matrix"
+	"github.com/nethesis/matrix2acrobits/service"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"maunium.net/go/mautrix/id"

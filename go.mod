@@ -1,4 +1,4 @@
-module github.com/gsanchietti/matrix2acrobits
+module github.com/nethesis/matrix2acrobits
 
 go 1.24.10
 

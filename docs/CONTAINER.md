@@ -9,5 +9,5 @@ This repository includes a GitHub Actions workflow that builds a container image
 The image can be pulled and run as follows:
 
 ```bash
-podman pull ghcr.io/gsanchietti/matrix2acrobits:latest
+podman pull ghcr.io/nethesis/matrix2acrobits:latest
 ```
