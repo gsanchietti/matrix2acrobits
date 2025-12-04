@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/labstack/echo/v4"
 	"github.com/nethesis/matrix2acrobits/models"
 	"github.com/nethesis/matrix2acrobits/service"
-	"github.com/labstack/echo/v4"
 )
 
 const adminTokenHeader = "X-Super-Admin-Token"
@@ -75,7 +75,12 @@ func (h handler) getMapping(c echo.Context) error {
 
 	smsNumber := strings.TrimSpace(c.QueryParam("sms_number"))
 	if smsNumber == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "sms_number query parameter is required")
+		// return full mappings list when sms_number is not provided
+		respList, err := h.svc.ListMappings()
+		if err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+		}
+		return c.JSON(http.StatusOK, respList)
 	}
 
 	resp, err := h.svc.LookupMapping(smsNumber)

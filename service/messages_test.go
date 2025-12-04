@@ -3,6 +3,7 @@ package service
 import (
 	"testing"
 
+	"github.com/nethesis/matrix2acrobits/models"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -150,5 +151,46 @@ func TestMapAuthErr(t *testing.T) {
 				assert.NotEqual(t, ErrAuthentication, err)
 			}
 		})
+	}
+}
+
+func TestListMappings(t *testing.T) {
+	svc := NewMessageService(nil)
+
+	// Seed two mappings
+	svc.setMapping(mappingEntry{
+		SMSNumber: "+111",
+		MatrixID:  "@alice:example.com",
+		RoomID:    "!room1:example.com",
+	})
+	svc.setMapping(mappingEntry{
+		SMSNumber: "+222",
+		MatrixID:  "@bob:example.com",
+		RoomID:    "!room2:example.com",
+	})
+
+	list, err := svc.ListMappings()
+	assert.NoError(t, err)
+	// We expect two mappings; order is not guaranteed.
+	assert.Len(t, list, 2)
+
+	// Build a map for easy assertions
+	m := make(map[string]*models.MappingResponse)
+	for _, it := range list {
+		m[it.SMSNumber] = it
+	}
+
+	if v, ok := m["+111"]; ok {
+		assert.Equal(t, "@alice:example.com", v.MatrixID)
+		assert.Equal(t, "!room1:example.com", v.RoomID)
+	} else {
+		t.Fatalf("missing mapping for +111")
+	}
+
+	if v, ok := m["+222"]; ok {
+		assert.Equal(t, "@bob:example.com", v.MatrixID)
+		assert.Equal(t, "!room2:example.com", v.RoomID)
+	} else {
+		t.Fatalf("missing mapping for +222")
 	}
 }

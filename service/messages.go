@@ -200,6 +200,17 @@ func (s *MessageService) LookupMapping(smsNumber string) (*models.MappingRespons
 	return s.buildMappingResponse(entry), nil
 }
 
+// ListMappings returns all stored mappings as MappingResponse slices.
+func (s *MessageService) ListMappings() ([]*models.MappingResponse, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]*models.MappingResponse, 0, len(s.mappings))
+	for _, entry := range s.mappings {
+		out = append(out, s.buildMappingResponse(entry))
+	}
+	return out, nil
+}
+
 // SaveMapping persists a new SMS-to-Matrix mapping via the admin API.
 func (s *MessageService) SaveMapping(req *models.MappingRequest) (*models.MappingResponse, error) {
 	smsNumber := strings.TrimSpace(req.SMSNumber)

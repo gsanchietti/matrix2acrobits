@@ -146,15 +146,19 @@ paths:
           name: sms_number
           schema:
             type: string
-          required: true
-          description: The SMS number or identifier previously mapped.
+          required: false
+          description: The SMS number or identifier previously mapped. If omitted, the endpoint returns the full list of mappings.
       responses:
         '200':
           description: Mapping found
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/MappingResponse'
+                oneOf:
+                  - $ref: '#/components/schemas/MappingResponse'
+                  - type: array
+                    items:
+                      $ref: '#/components/schemas/MappingResponse'
         '401':
           description: Invalid admin token.
         '404':
