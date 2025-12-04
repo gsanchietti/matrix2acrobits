@@ -38,6 +38,7 @@ type mappingEntry struct {
 	SMSNumber string
 	MatrixID  string
 	RoomID    id.RoomID
+	UserName  string
 	UpdatedAt time.Time
 }
 
@@ -137,8 +138,8 @@ func (s *MessageService) FetchMessages(ctx context.Context, req *models.FetchMes
 				continue
 			}
 			msg := convertEvent(evt)
-			// Remap sender from Matrix ID to SMS number if mapping exists
-			msg.Sender = s.remapMatrixToSMS(msg.Sender)
+			// Remap sender from Matrix ID to User name if mapping exists
+			msg.Sender = s.remapMatrixToUserName(msg.Sender)
 			if isSentBy(msg.Sender, string(userID)) {
 				sent = append(sent, msg)
 			} else {
@@ -179,9 +180,11 @@ func (s *MessageService) resolveMatrixUser(identifier string) id.UserID {
 	return ""
 }
 
-// remapMatrixToSMS attempts to remap a Matrix user ID to an SMS number if a mapping exists.
-// If no mapping is found, returns the original Matrix ID.
-func (s *MessageService) remapMatrixToSMS(matrixID string) string {
+// remapMatrixToUserName attempts to remap a Matrix user ID to a configured user name if a mapping exists.
+// If a user name is present in the mapping, it is returned. Otherwise, if an SMS number is
+// configured for the mapping that is a plausible phone number it will be returned. If no mapping
+// is found, returns the original Matrix ID.
+func (s *MessageService) remapMatrixToUserName(matrixID string) string {
 	matrixID = strings.TrimSpace(matrixID)
 
 	// Search through all mappings to find one where MatrixID matches
@@ -189,8 +192,19 @@ func (s *MessageService) remapMatrixToSMS(matrixID string) string {
 	defer s.mu.RUnlock()
 	for _, entry := range s.mappings {
 		if strings.EqualFold(entry.MatrixID, matrixID) {
-			logger.Debug().Str("matrix_id", matrixID).Str("sms_number", entry.SMSNumber).Msg("remapped matrix id to sms number")
-			return entry.SMSNumber
+			if entry.UserName != "" {
+				logger.Debug().Str("matrix_id", matrixID).Str("user_name", entry.UserName).Msg("remapped matrix id to user name")
+				return entry.UserName
+			}
+			// Fall back to SMS number if it looks like a phone number
+			if isPhoneNumber(entry.SMSNumber) {
+				logger.Debug().Str("matrix_id", matrixID).Str("sms_number", entry.SMSNumber).Msg("remapped matrix id to sms number (fallback)")
+				return entry.SMSNumber
+			}
+			// If we have a MatrixID stored in the entry, prefer returning that normalized value
+			if entry.MatrixID != "" {
+				return entry.MatrixID
+			}
 		}
 	}
 
@@ -310,8 +324,8 @@ func (s *MessageService) SaveMapping(req *models.MappingRequest) (*models.Mappin
 // LoadMappingsFromFile loads mappings from a JSON file in the format:
 //
 //	[
-//	  {"sms_number": "91201", "matrix_id": "@giacomo:synapse.gs.nethserver.net", "room_id": "!giacomo-room:synapse.gs.nethserver.net"},
-//	  {"sms_number": "91202", "matrix_id": "@mario:synapse.gs.nethserver.net", "room_id": "!mario-room:synapse.gs.nethserver.net"}
+//	  {"sms_number": "91201", "matrix_id": "@giacomo:synapse.gs.nethserver.net", "room_id": "!giacomo-room:synapse.gs.nethserver.net", "user_name": "Giacomo Rossi"},
+//	  {"sms_number": "91202", "matrix_id": "@mario:synapse.gs.nethserver.net", "room_id": "!mario-room:synapse.gs.nethserver.net", "user_name": "Mario Bianchi"}
 //	]
 //
 // This is typically called at startup if MAPPING_FILE environment variable is set.
@@ -335,6 +349,7 @@ func (s *MessageService) LoadMappingsFromFile(filePath string) error {
 			SMSNumber: req.SMSNumber,
 			MatrixID:  req.MatrixID,
 			RoomID:    id.RoomID(req.RoomID),
+			UserName:  req.UserName,
 			UpdatedAt: s.now(),
 		}
 		s.setMapping(entry)
