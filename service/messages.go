@@ -18,8 +18,9 @@ import (
 
 var (
 	ErrAuthentication   = errors.New("matrix authentication failed")
-	ErrInvalidRecipient = errors.New("recipient is not resolvable to a Matrix room")
+	ErrInvalidRecipient = errors.New("recipient is not resolvable to a Matrix user or room")
 	ErrMappingNotFound  = errors.New("mapping not found")
+	ErrInvalidSender    = errors.New("sender is not resolvable to a Matrix user")
 )
 
 // MessageService handles sending/fetching messages plus the mapping store.
@@ -48,48 +49,65 @@ func NewMessageService(matrixClient *matrix.MatrixClient) *MessageService {
 }
 
 // SendMessage translates an Acrobits send_message request into Matrix /send.
+// Only 1-to-1 direct messaging is supported.
+// Both sender and recipient are resolved to Matrix user IDs using local mappings if necessary.
 func (s *MessageService) SendMessage(ctx context.Context, req *models.SendMessageRequest) (*models.SendMessageResponse, error) {
-	// The user to impersonate is taken from the 'From' field.
-	userID := id.UserID(req.From)
-	if userID == "" {
-		logger.Warn().Msg("send message: empty user ID")
-		return nil, ErrAuthentication
+	senderStr := strings.TrimSpace(req.From)
+	if senderStr == "" {
+		logger.Warn().Msg("send message: empty sender")
+		return nil, ErrInvalidSender
 	}
 
-	// If 'From' is a phone number, try to map it to a Matrix user
-	if isPhoneNumber(req.From) {
-		logger.Debug().Str("from", req.From).Msg("sender is a phone number, attempting to resolve to Matrix user")
-		if entry, ok := s.getMapping(req.From); ok && entry.MatrixID != "" {
-			resolvedUserID := id.UserID(entry.MatrixID)
-			logger.Info().Str("phone_number", req.From).Str("matrix_id", entry.MatrixID).Msg("phone number mapped to Matrix user")
-			userID = resolvedUserID
-		} else {
-			logger.Warn().Str("phone_number", req.From).Msg("phone number mapping not found, using original sender ID")
-		}
+	recipientStr := strings.TrimSpace(req.SMSTo)
+	if recipientStr == "" {
+		logger.Warn().Msg("send message: empty recipient")
+		return nil, ErrInvalidRecipient
 	}
 
-	logger.Debug().Str("user_id", string(userID)).Str("recipient", req.SMSTo).Msg("resolving recipient")
+	// Resolve sender to a valid Matrix user ID
+	sender := s.resolveMatrixUser(senderStr)
+	if sender == "" {
+		logger.Warn().Str("sender", senderStr).Msg("sender is not a valid Matrix user ID")
+		return nil, ErrInvalidSender
+	}
 
-	roomID, err := s.resolveRecipient(ctx, userID, req.SMSTo)
+	// Resolve recipient to a valid Matrix user ID
+	recipient := s.resolveMatrixUser(recipientStr)
+	if recipient == "" {
+		logger.Warn().Str("recipient", recipientStr).Msg("recipient is not a valid Matrix user ID")
+		return nil, ErrInvalidRecipient
+	}
+
+	logger.Debug().Str("sender", string(sender)).Str("recipient", string(recipient)).Msg("resolved sender and recipient to Matrix user IDs")
+
+	// For 1-to-1 messaging, ensure a direct room exists between sender and recipient
+	roomID, err := s.ensureDirectRoom(ctx, sender, recipient)
 	if err != nil {
-		logger.Error().Str("user_id", string(userID)).Str("recipient", req.SMSTo).Err(err).Msg("failed to resolve recipient")
+		logger.Error().Str("sender", string(sender)).Str("recipient", string(recipient)).Err(err).Msg("failed to ensure direct room")
 		return nil, err
 	}
 
-	logger.Debug().Str("user_id", string(userID)).Str("room_id", string(roomID)).Msg("sending message to room")
+	logger.Debug().Str("sender", string(sender)).Str("recipient", string(recipient)).Str("room_id", string(roomID)).Msg("sending message to direct room")
+
+	// Ensure the sender is a member of the room (in case join failed during room creation)
+	_, err = s.matrixClient.JoinRoom(ctx, sender, roomID)
+	if err != nil {
+		logger.Error().Str("sender", string(sender)).Str("room_id", string(roomID)).Err(err).Msg("failed to join room")
+		return nil, fmt.Errorf("send message: %w", err)
+	}
 
 	content := &event.MessageEventContent{
 		MsgType: event.MsgText,
 		Body:    req.SMSBody,
 	}
 
-	resp, err := s.matrixClient.SendMessage(ctx, userID, roomID, content)
+	resp, err := s.matrixClient.SendMessage(ctx, sender, roomID, content)
 	if err != nil {
-		logger.Error().Str("user_id", string(userID)).Str("room_id", string(roomID)).Err(err).Msg("failed to send message")
+		logger.Error().Str("sender", string(sender)).Str("room_id", string(roomID)).Err(err).Msg("failed to send message")
 		return nil, fmt.Errorf("send message: %w", mapAuthErr(err))
 	}
 
-	logger.Debug().Str("user_id", string(userID)).Str("room_id", string(roomID)).Str("event_id", string(resp.EventID)).Msg("message sent successfully")
+	logger.Debug().Str("sender", string(sender)).Str("room_id", string(roomID)).Str("event_id", string(resp.EventID)).Msg("message sent successfully")
 	return &models.SendMessageResponse{SMSID: string(resp.EventID)}, nil
 }
 
@@ -134,41 +152,27 @@ func (s *MessageService) FetchMessages(ctx context.Context, req *models.FetchMes
 	}, nil
 }
 
-func (s *MessageService) resolveRecipient(ctx context.Context, actingUserID id.UserID, raw string) (id.RoomID, error) {
-	trimmed := strings.TrimSpace(raw)
-	if trimmed == "" {
-		logger.Warn().Str("user_id", string(actingUserID)).Msg("empty recipient")
-		return "", ErrInvalidRecipient
+// resolveMatrixUser resolves an identifier to a valid Matrix user ID.
+// If the identifier is already a valid Matrix user ID (starts with @), it's returned as-is.
+// Otherwise, it tries to look up the identifier in the mapping store (e.g., phone number to user).
+// Returns empty string if the identifier cannot be resolved.
+func (s *MessageService) resolveMatrixUser(identifier string) id.UserID {
+	identifier = strings.TrimSpace(identifier)
+
+	// If it's already a valid Matrix user ID, return it
+	if strings.HasPrefix(identifier, "@") {
+		return id.UserID(identifier)
 	}
-	// If it looks like a RoomID, use it directly.
-	if strings.HasPrefix(trimmed, "!") {
-		logger.Debug().Str("user_id", string(actingUserID)).Str("room_id", trimmed).Msg("using direct room ID")
-		return id.RoomID(trimmed), nil
+
+	// Try to look up in mappings (e.g., phone number to Matrix user)
+	if entry, ok := s.getMapping(identifier); ok && entry.MatrixID != "" {
+		logger.Debug().Str("original_identifier", identifier).Str("resolved_user", entry.MatrixID).Msg("identifier resolved from mapping")
+		return id.UserID(entry.MatrixID)
 	}
-	// If it looks like a UserID, ensure a DM exists and use that room.
-	if strings.HasPrefix(trimmed, "@") {
-		logger.Debug().Str("user_id", string(actingUserID)).Str("target_user", trimmed).Msg("resolving recipient as user ID (DM)")
-		return s.ensureDirectRoom(ctx, actingUserID, id.UserID(trimmed))
-	}
-	// If it's a room alias, resolve it.
-	if strings.HasPrefix(trimmed, "#") {
-		logger.Debug().Str("user_id", string(actingUserID)).Str("alias", trimmed).Msg("resolving room alias")
-		resp, err := s.matrixClient.ResolveRoomAlias(ctx, trimmed)
-		if err != nil {
-			logger.Error().Str("user_id", string(actingUserID)).Str("alias", trimmed).Err(err).Msg("failed to resolve room alias")
-			return "", fmt.Errorf("resolve room alias: %w", err)
-		}
-		logger.Debug().Str("user_id", string(actingUserID)).Str("alias", trimmed).Str("room_id", string(resp.RoomID)).Msg("room alias resolved")
-		return resp.RoomID, nil
-	}
-	// Otherwise, check our internal mapping for a phone number.
-	logger.Debug().Str("user_id", string(actingUserID)).Str("identifier", trimmed).Msg("checking mapping store")
-	if entry, ok := s.getMapping(trimmed); ok && entry.RoomID != "" {
-		logger.Debug().Str("user_id", string(actingUserID)).Str("identifier", trimmed).Str("room_id", string(entry.RoomID)).Msg("mapping found")
-		return entry.RoomID, nil
-	}
-	logger.Warn().Str("user_id", string(actingUserID)).Str("identifier", trimmed).Msg("recipient not resolvable")
-	return "", ErrInvalidRecipient
+
+	// Could not resolve
+	logger.Warn().Str("identifier", identifier).Msg("identifier could not be resolved to a Matrix user ID")
+	return ""
 }
 
 func (s *MessageService) ensureDirectRoom(ctx context.Context, actingUserID, targetUserID id.UserID) (id.RoomID, error) {
@@ -234,20 +238,20 @@ func (s *MessageService) setMapping(entry mappingEntry) mappingEntry {
 	defer s.mu.Unlock()
 	entry.UpdatedAt = s.now()
 	s.mappings[normalized] = entry
-	logger.Debug().Str("sms_number", entry.SMSNumber).Str("room_id", string(entry.RoomID)).Msg("mapping stored")
+	logger.Debug().Str("key", entry.SMSNumber).Str("room_id", string(entry.RoomID)).Msg("mapping stored")
 	return entry
 }
 
-// LookupMapping returns the currently stored mapping for a given sms number.
-func (s *MessageService) LookupMapping(smsNumber string) (*models.MappingResponse, error) {
-	entry, ok := s.getMapping(smsNumber)
+// LookupMapping returns the currently stored mapping for a given key (phone number or user pair).
+func (s *MessageService) LookupMapping(key string) (*models.MappingResponse, error) {
+	entry, ok := s.getMapping(key)
 	if !ok {
 		return nil, ErrMappingNotFound
 	}
 	return s.buildMappingResponse(entry), nil
 }
 
-// ListMappings returns all stored mappings as MappingResponse slices.
+// ListMappings returns all stored mappings.
 func (s *MessageService) ListMappings() ([]*models.MappingResponse, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -258,7 +262,8 @@ func (s *MessageService) ListMappings() ([]*models.MappingResponse, error) {
 	return out, nil
 }
 
-// SaveMapping persists a new SMS-to-Matrix mapping via the admin API.
+// SaveMapping persists a new mapping via the admin API.
+// For 1-to-1 messaging, this maps a key (phone number or identifier) to a direct room.
 func (s *MessageService) SaveMapping(req *models.MappingRequest) (*models.MappingResponse, error) {
 	smsNumber := strings.TrimSpace(req.SMSNumber)
 	if smsNumber == "" {
@@ -326,7 +331,7 @@ func mapAuthErr(err error) error {
 	if errors.Is(err, ErrAuthentication) {
 		return err
 	}
-	if errors.Is(err, mautrix.MUnknownToken) || errors.Is(err, mautrix.MMissingToken) || errors.Is(err, mautrix.MForbidden) {
+	if errors.Is(err, mautrix.MUnknownToken) || errors.Is(err, mautrix.MMissingToken) {
 		return fmt.Errorf("%w", ErrAuthentication)
 	}
 	return err

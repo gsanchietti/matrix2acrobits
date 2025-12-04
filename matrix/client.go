@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -26,8 +27,10 @@ type Config struct {
 // Note: The underlying mautrix client is stateful for impersonation in this version.
 // A mutex is used to make operations thread-safe.
 type MatrixClient struct {
-	cli *mautrix.Client
-	mu  sync.Mutex
+	cli            *mautrix.Client
+	homeserverURL  string
+	homeserverName string
+	mu             sync.Mutex
 }
 
 // NewClient creates a MatrixClient authenticated as an Application Service.
@@ -56,8 +59,19 @@ func NewClient(cfg Config) (*MatrixClient, error) {
 	// This flag enables the `user_id` query parameter for impersonation.
 	client.SetAppServiceUserID = true
 
+	// Extract homeserver name from URL (e.g., https://synapse.example.com -> synapse.example.com)
+	homeserverName := strings.TrimPrefix(cfg.HomeserverURL, "https://")
+	homeserverName = strings.TrimPrefix(homeserverName, "http://")
+	homeserverName = strings.TrimSuffix(homeserverName, "/")
+	// Remove path if present
+	if idx := strings.Index(homeserverName, "/"); idx > 0 {
+		homeserverName = homeserverName[:idx]
+	}
+
 	return &MatrixClient{
-		cli: client,
+		cli:            client,
+		homeserverURL:  cfg.HomeserverURL,
+		homeserverName: homeserverName,
 	}, nil
 }
 
@@ -128,7 +142,26 @@ func (mc *MatrixClient) JoinRoom(ctx context.Context, userID id.UserID, roomID i
 	defer mc.mu.Unlock()
 
 	mc.cli.UserID = userID
-	return mc.cli.JoinRoom(ctx, string(roomID), nil)
+
+	// Extract homeserver from room ID for federated joins
+	// Room ID format: !opaque:homeserver.name
+	roomIDStr := string(roomID)
+	req := &mautrix.ReqJoinRoom{}
+
+	if idx := strings.Index(roomIDStr, ":"); idx > 0 && idx < len(roomIDStr)-1 {
+		roomServerName := roomIDStr[idx+1:]
+
+		// Only add Via if the room is on a different homeserver (federated)
+		if roomServerName != "" && roomServerName != mc.homeserverName {
+			req.Via = []string{roomServerName}
+			logger.Debug().Str("user_id", string(userID)).Str("room_id", roomIDStr).Str("room_server", roomServerName).Str("local_server", mc.homeserverName).Msg("matrix: joining federated room with homeserver hint")
+		} else {
+			logger.Debug().Str("user_id", string(userID)).Str("room_id", roomIDStr).Msg("matrix: joining local room without via")
+		}
+	}
+
+	logger.Debug().Str("user_id", string(userID)).Str("room_id", roomIDStr).Bool("has_via", len(req.Via) > 0).Msg("matrix: calling JoinRoom")
+	return mc.cli.JoinRoom(ctx, roomIDStr, req)
 }
 
 // CreateRoom creates a new room impersonating the specified userID.
