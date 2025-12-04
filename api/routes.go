@@ -35,10 +35,13 @@ func (h handler) sendMessage(c echo.Context) error {
 	}
 
 	logger.Debug().Str("endpoint", "send_message").Str("from", req.From).Str("to", req.SMSTo).Msg("processing send message request")
+	logger.Debug().Str("endpoint", "send_message").Str("raw_from", req.From).Str("raw_to", req.SMSTo).Msg("raw identifiers for recipient resolution")
 
 	resp, err := h.svc.SendMessage(c.Request().Context(), &req)
 	if err != nil {
 		logger.Error().Str("endpoint", "send_message").Str("from", req.From).Str("to", req.SMSTo).Err(err).Msg("failed to send message")
+		// Add extra context to help debugging recipient resolution
+		logger.Debug().Str("endpoint", "send_message").Str("from", req.From).Str("to", req.SMSTo).Msg("send_message handler returning error to client; check mapping store and AS configuration")
 		return mapServiceError(err)
 	}
 
