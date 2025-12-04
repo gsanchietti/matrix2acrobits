@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"os"
 	"testing"
 
@@ -363,12 +364,11 @@ func TestLoadMappingsFromFile_InvalidJSON(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to parse mapping file")
 }
-
 func TestReportPushToken(t *testing.T) {
 	// Test with nil request
 	t.Run("nil request", func(t *testing.T) {
 		svc := NewMessageService(nil, nil)
-		resp, err := svc.ReportPushToken(nil, nil)
+		resp, err := svc.ReportPushToken(context.TODO(), nil)
 		assert.Error(t, err)
 		assert.Nil(t, resp)
 	})
@@ -381,7 +381,7 @@ func TestReportPushToken(t *testing.T) {
 			TokenMsgs: "token123",
 			AppIDMsgs: "com.app",
 		}
-		resp, err := svc.ReportPushToken(nil, req)
+		resp, err := svc.ReportPushToken(context.TODO(), req)
 		assert.Error(t, err)
 		assert.Nil(t, resp)
 		assert.Contains(t, err.Error(), "selector is required")
@@ -395,7 +395,7 @@ func TestReportPushToken(t *testing.T) {
 			TokenMsgs: "token123",
 			AppIDMsgs: "com.app",
 		}
-		resp, err := svc.ReportPushToken(nil, req)
+		resp, err := svc.ReportPushToken(context.TODO(), req)
 		assert.Error(t, err)
 		assert.Nil(t, resp)
 		assert.Contains(t, err.Error(), "push token storage not available")
