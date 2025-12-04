@@ -116,7 +116,7 @@ func (s *MessageService) SendMessage(ctx context.Context, req *models.SendMessag
 // FetchMessages translates Matrix /sync into the Acrobits fetch_messages response.
 func (s *MessageService) FetchMessages(ctx context.Context, req *models.FetchMessagesRequest) (*models.FetchMessagesResponse, error) {
 	// The user to impersonate is taken from the 'Username' field.
-	userID := id.UserID(req.Username)
+	userID := s.resolveMatrixUser(strings.TrimSpace(req.Username))
 	if userID == "" {
 		logger.Warn().Msg("fetch messages: empty user ID")
 		return nil, ErrAuthentication
@@ -137,7 +137,9 @@ func (s *MessageService) FetchMessages(ctx context.Context, req *models.FetchMes
 				continue
 			}
 			msg := convertEvent(evt)
-			if isSentBy(msg.Sender, req.Username) {
+			// Remap sender from Matrix ID to SMS number if mapping exists
+			msg.Sender = s.remapMatrixToSMS(msg.Sender)
+			if isSentBy(msg.Sender, string(userID)) {
 				sent = append(sent, msg)
 			} else {
 				received = append(received, msg)
@@ -175,6 +177,25 @@ func (s *MessageService) resolveMatrixUser(identifier string) id.UserID {
 	// Could not resolve
 	logger.Warn().Str("identifier", identifier).Msg("identifier could not be resolved to a Matrix user ID")
 	return ""
+}
+
+// remapMatrixToSMS attempts to remap a Matrix user ID to an SMS number if a mapping exists.
+// If no mapping is found, returns the original Matrix ID.
+func (s *MessageService) remapMatrixToSMS(matrixID string) string {
+	matrixID = strings.TrimSpace(matrixID)
+
+	// Search through all mappings to find one where MatrixID matches
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, entry := range s.mappings {
+		if strings.EqualFold(entry.MatrixID, matrixID) {
+			logger.Debug().Str("matrix_id", matrixID).Str("sms_number", entry.SMSNumber).Msg("remapped matrix id to sms number")
+			return entry.SMSNumber
+		}
+	}
+
+	// No mapping found, return the original Matrix ID
+	return matrixID
 }
 
 func (s *MessageService) ensureDirectRoom(ctx context.Context, actingUserID, targetUserID id.UserID) (id.RoomID, error) {
