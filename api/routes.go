@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/labstack/echo/v4"
+	"github.com/nethesis/matrix2acrobits/db"
 	"github.com/nethesis/matrix2acrobits/logger"
 	"github.com/nethesis/matrix2acrobits/models"
 	"github.com/nethesis/matrix2acrobits/service"
@@ -14,18 +15,21 @@ import (
 const adminTokenHeader = "X-Super-Admin-Token"
 
 // RegisterRoutes wires API endpoints to Echo handlers.
-func RegisterRoutes(e *echo.Echo, svc *service.MessageService, adminToken string) {
-	h := handler{svc: svc, adminToken: adminToken}
+func RegisterRoutes(e *echo.Echo, svc *service.MessageService, adminToken string, pushTokenDB interface{}) {
+	h := handler{svc: svc, adminToken: adminToken, pushTokenDB: pushTokenDB}
 	e.POST("/api/client/send_message", h.sendMessage)
 	e.POST("/api/client/fetch_messages", h.fetchMessages)
 	e.POST("/api/client/push_token_report", h.pushTokenReport)
 	e.POST("/api/internal/map_sms_to_matrix", h.postMapping)
 	e.GET("/api/internal/map_sms_to_matrix", h.getMapping)
+	e.GET("/api/internal/push_tokens", h.getPushTokens)
+	e.DELETE("/api/internal/push_tokens", h.resetPushTokens)
 }
 
 type handler struct {
-	svc        *service.MessageService
-	adminToken string
+	svc         *service.MessageService
+	adminToken  string
+	pushTokenDB interface{}
 }
 
 func (h handler) sendMessage(c echo.Context) error {
@@ -145,11 +149,56 @@ func (h handler) getMapping(c echo.Context) error {
 	return c.JSON(http.StatusOK, resp)
 }
 
+func (h handler) getPushTokens(c echo.Context) error {
+	if err := h.ensureAdminAccess(c); err != nil {
+		return err
+	}
+
+	logger.Debug().Str("endpoint", "get_push_tokens").Msg("fetching all push tokens")
+
+	db, ok := h.pushTokenDB.(*db.Database)
+	if !ok {
+		logger.Error().Str("endpoint", "get_push_tokens").Msg("push token database not available")
+		return echo.NewHTTPError(http.StatusInternalServerError, "push token database not available")
+	}
+
+	tokens, err := db.ListPushTokens()
+	if err != nil {
+		logger.Error().Str("endpoint", "get_push_tokens").Err(err).Msg("failed to list push tokens")
+		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+	}
+
+	logger.Info().Str("endpoint", "get_push_tokens").Int("count", len(tokens)).Msg("push tokens listed successfully")
+	return c.JSON(http.StatusOK, tokens)
+}
+
+func (h handler) resetPushTokens(c echo.Context) error {
+	if err := h.ensureAdminAccess(c); err != nil {
+		return err
+	}
+
+	logger.Debug().Str("endpoint", "reset_push_tokens").Msg("resetting push tokens database")
+
+	db, ok := h.pushTokenDB.(*db.Database)
+	if !ok {
+		logger.Error().Str("endpoint", "reset_push_tokens").Msg("push token database not available")
+		return echo.NewHTTPError(http.StatusInternalServerError, "push token database not available")
+	}
+
+	if err := db.ResetPushTokens(); err != nil {
+		logger.Error().Str("endpoint", "reset_push_tokens").Err(err).Msg("failed to reset push tokens")
+		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+	}
+
+	logger.Info().Str("endpoint", "reset_push_tokens").Msg("push tokens database reset successfully")
+	return c.JSON(http.StatusOK, map[string]string{"status": "reset"})
+}
+
 func (h handler) ensureAdminAccess(c echo.Context) error {
 	if h.adminToken == "" {
 		return echo.NewHTTPError(http.StatusInternalServerError, "admin token not configured")
 	}
-	if !isLocalhost(c.RealIP()) {
+	if !h.isLocalhost(c.RealIP()) {
 		return echo.NewHTTPError(http.StatusForbidden, "mapping API only available from localhost")
 	}
 	token := c.Request().Header.Get(adminTokenHeader)
@@ -172,7 +221,7 @@ func mapServiceError(err error) error {
 	}
 }
 
-func isLocalhost(ip string) bool {
+func (h handler) isLocalhost(ip string) bool {
 	trimmed := ip
 	if colon := strings.LastIndex(trimmed, ":"); colon != -1 {
 		trimmed = trimmed[:colon]

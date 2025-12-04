@@ -147,7 +147,7 @@ func startTestServer(cfg *testConfig) (*echo.Echo, error) {
 	}
 
 	svc := service.NewMessageService(matrixClient, nil)
-	api.RegisterRoutes(e, svc, cfg.adminToken)
+	api.RegisterRoutes(e, svc, cfg.adminToken, nil)
 
 	go func() {
 		if err := e.Start("127.0.0.1:" + testServerPort); err != nil && err != http.ErrServerClosed {

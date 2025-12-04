@@ -208,6 +208,64 @@ paths:
         '404':
           description: No mapping exists for the requested identifier.
 
+  /api/internal/push_tokens:
+    get:
+      summary: Get all push tokens
+      description: |
+        Returns the contents of the push token database. Requires the `X-Super-Admin-Token` header
+        and can only be accessed from localhost.
+      parameters:
+        - in: header
+          name: X-Super-Admin-Token
+          schema:
+            type: string
+          required: true
+          description: The Application Service token (as_token).
+      responses:
+        '200':
+          description: Push tokens retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PushToken'
+        '401':
+          description: Invalid admin token.
+        '403':
+          description: Access denied (not from localhost).
+        '500':
+          description: Server error (e.g., database unavailable).
+    delete:
+      summary: Reset push token database
+      description: |
+        Deletes all push tokens from the database. Requires the `X-Super-Admin-Token` header
+        and can only be accessed from localhost.
+      parameters:
+        - in: header
+          name: X-Super-Admin-Token
+          schema:
+            type: string
+          required: true
+          description: The Application Service token (as_token).
+      responses:
+        '200':
+          description: Push tokens database reset successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "reset"
+        '401':
+          description: Invalid admin token.
+        '403':
+          description: Access denied (not from localhost).
+        '500':
+          description: Server error (e.g., database unavailable).
+
 components:
   schemas:
     Message:
@@ -315,4 +373,36 @@ components:
           description: |
             Apple application ID for incoming call notifications.
             Used in conjunction with token_calls.
+    PushToken:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: Internal database ID.
+        selector:
+          type: string
+          description: |
+            SHA1 hash with suffix that uniquely identifies the account.
+            Example: 12869E0E6E553673C54F29105A0647204C416A2A:7C3A0D14
+        token_msgs:
+          type: string
+          description: Base64-encoded push token for regular notifications.
+        appid_msgs:
+          type: string
+          description: Apple application ID for regular notifications.
+        token_calls:
+          type: string
+          description: Base64-encoded push token for VoIP/incoming call notifications.
+        appid_calls:
+          type: string
+          description: Apple application ID for incoming call notifications.
+        created_at:
+          type: string
+          format: date-time
+          description: Timestamp when the push token was first created (RFC 3339).
+        updated_at:
+          type: string
+          format: date-time
+          description: Timestamp when the push token was last updated (RFC 3339).
+
 

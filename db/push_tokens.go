@@ -173,6 +173,26 @@ func (d *Database) ListPushTokens() ([]*PushToken, error) {
 	return tokens, nil
 }
 
+// ResetPushTokens deletes all push tokens from the database.
+func (d *Database) ResetPushTokens() error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	query := `DELETE FROM push_tokens;`
+	result, err := d.db.Exec(query)
+	if err != nil {
+		return fmt.Errorf("failed to reset push tokens: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	logger.Info().Int64("rows_deleted", rowsAffected).Msg("push tokens database reset")
+	return nil
+}
+
 // Close closes the database connection.
 func (d *Database) Close() error {
 	if d.db != nil {

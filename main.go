@@ -69,7 +69,7 @@ func main() {
 	// Initialize push token database
 	pushTokenDBPath := os.Getenv("PUSH_TOKEN_DB_PATH")
 	if pushTokenDBPath == "" {
-		pushTokenDBPath = "/var/lib/matrix2acrobits/push_tokens.db"
+		pushTokenDBPath = "/tmp/push_tokens.db"
 	}
 
 	pushTokenDB, err := db.NewDatabase(pushTokenDBPath)
@@ -79,7 +79,7 @@ func main() {
 	defer pushTokenDB.Close()
 
 	svc := service.NewMessageService(matrixClient, pushTokenDB)
-	api.RegisterRoutes(e, svc, adminToken)
+	api.RegisterRoutes(e, svc, adminToken, pushTokenDB)
 
 	// Load mappings from file if MAPPING_FILE env var is set
 	mappingFile := os.Getenv("MAPPING_FILE")
