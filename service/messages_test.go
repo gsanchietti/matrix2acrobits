@@ -365,6 +365,85 @@ func TestLoadMappingsFromFile_InvalidJSON(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to parse mapping file")
 }
 
+func TestResolveMatrixUser_SubNumbers(t *testing.T) {
+	// Test case 1: Resolve sub_number to matrix_id
+	t.Run("resolve sub_number to matrix_id", func(t *testing.T) {
+		svc := NewMessageService(nil, nil)
+		svc.SaveMapping(&models.MappingRequest{
+			Number:     "201",
+			MatrixID:   "@giacomo:example.com",
+			RoomID:     "!room1:example.com",
+			UserName:   "Giacomo Rossi",
+			SubNumbers: []string{"3344", "91201"},
+		})
+
+		// Resolve using a sub_number
+		result := svc.resolveMatrixUser("91201")
+		assert.Equal(t, "@giacomo:example.com", string(result), "should resolve sub_number to matrix_id")
+	})
+
+	// Test case 2: Resolve main number to matrix_id
+	t.Run("resolve main number to matrix_id", func(t *testing.T) {
+		svc := NewMessageService(nil, nil)
+		svc.SaveMapping(&models.MappingRequest{
+			Number:   "202",
+			MatrixID: "@mario:example.com",
+			RoomID:   "!room2:example.com",
+			UserName: "Mario Bianchi",
+		})
+
+		// Resolve using the main number
+		result := svc.resolveMatrixUser("202")
+		assert.Equal(t, "@mario:example.com", string(result), "should resolve main number to matrix_id")
+	})
+
+	// Test case 3: Resolve another sub_number
+	t.Run("resolve another sub_number", func(t *testing.T) {
+		svc := NewMessageService(nil, nil)
+		svc.SaveMapping(&models.MappingRequest{
+			Number:     "201",
+			MatrixID:   "@giacomo:example.com",
+			RoomID:     "!room1:example.com",
+			UserName:   "Giacomo Rossi",
+			SubNumbers: []string{"3344", "91201"},
+		})
+
+		// Resolve using a different sub_number
+		result := svc.resolveMatrixUser("3344")
+		assert.Equal(t, "@giacomo:example.com", string(result), "should resolve any sub_number to matrix_id")
+	})
+
+	// Test case 4: Matrix ID passed directly
+	t.Run("matrix id passed directly", func(t *testing.T) {
+		svc := NewMessageService(nil, nil)
+		result := svc.resolveMatrixUser("@test:example.com")
+		assert.Equal(t, "@test:example.com", string(result), "should return matrix_id as-is if it starts with @")
+	})
+
+	// Test case 5: No mapping found
+	t.Run("no mapping found", func(t *testing.T) {
+		svc := NewMessageService(nil, nil)
+		result := svc.resolveMatrixUser("9999")
+		assert.Equal(t, "", string(result), "should return empty string if no mapping found")
+	})
+
+	// Test case 6: Case insensitivity
+	t.Run("case insensitive sub_number resolution", func(t *testing.T) {
+		svc := NewMessageService(nil, nil)
+		svc.SaveMapping(&models.MappingRequest{
+			Number:     "201",
+			MatrixID:   "@giacomo:example.com",
+			RoomID:     "!room1:example.com",
+			UserName:   "Giacomo Rossi",
+			SubNumbers: []string{"3344", "91201"},
+		})
+
+		// Resolve with different case (though phone numbers are typically numeric)
+		result := svc.resolveMatrixUser("91201")
+		assert.Equal(t, "@giacomo:example.com", string(result), "should resolve case-insensitively")
+	})
+}
+
 func TestResolveMatrixIDToIdentifier_SubNumbers(t *testing.T) {
 	// Test case 1: Resolve via sub_number match
 	// When a matrix_id matches one of the sub_numbers, the main number should be returned (not the sub_number)

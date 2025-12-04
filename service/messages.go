@@ -223,7 +223,11 @@ func (s *MessageService) FetchMessages(ctx context.Context, req *models.FetchMes
 
 // resolveMatrixUser resolves an identifier to a valid Matrix user ID.
 // If the identifier is already a valid Matrix user ID (starts with @), it's returned as-is.
-// Otherwise, it tries to look up the identifier in the mapping store (e.g., phone number to user).
+// Otherwise, it tries to look up the identifier in the mapping store with the following logic:
+//   - First tries to match the identifier as the main number
+//   - If no match, tries to find the identifier in any entry's sub_numbers array
+//     (if a sub_number matches, returns the matrix_id of that entry)
+//
 // Returns empty string if the identifier cannot be resolved.
 func (s *MessageService) resolveMatrixUser(identifier string) id.UserID {
 	identifier = strings.TrimSpace(identifier)
@@ -238,6 +242,19 @@ func (s *MessageService) resolveMatrixUser(identifier string) id.UserID {
 		logger.Debug().Str("original_identifier", identifier).Str("resolved_user", entry.MatrixID).Msg("identifier resolved from mapping")
 		return id.UserID(entry.MatrixID)
 	}
+
+	// If not found as main number, try to find it in any sub_numbers
+	s.mu.RLock()
+	for _, entry := range s.mappings {
+		for _, subNum := range entry.SubNumbers {
+			if strings.EqualFold(strings.TrimSpace(subNum), identifier) {
+				s.mu.RUnlock()
+				logger.Debug().Str("original_identifier", identifier).Str("sub_number", subNum).Str("resolved_user", entry.MatrixID).Msg("identifier resolved from sub_number mapping")
+				return id.UserID(entry.MatrixID)
+			}
+		}
+	}
+	s.mu.RUnlock()
 
 	// Could not resolve
 	logger.Warn().Str("identifier", identifier).Msg("identifier could not be resolved to a Matrix user ID")
