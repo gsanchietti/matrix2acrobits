@@ -49,22 +49,7 @@ For debugging mapping and API issues, set `LOGLEVEL=DEBUG` to see detailed trace
 
 You can pre-load SMS-to-Matrix mappings at startup by providing a `MAPPING_FILE` environment variable pointing to a JSON file. This is useful for initializing the proxy with a set of known mappings.
 
-The JSON file should be an array of mapping objects:
-
-```json
-[
-  {
-    "sms_number": "91201",
-    "matrix_id": "@giacomo:synapse.gs.nethserver.net",
-    "room_id": "!giacomo-room:synapse.gs.nethserver.net"
-  },
-  {
-    "sms_number": "91202",
-    "matrix_id": "@mario:synapse.gs.nethserver.net",
-    "room_id": "!mario-room:synapse.gs.nethserver.net"
-  }
-]
-```
+See `docs/example-mappings.json` for an example format.
 
 Usage:
 

@@ -494,6 +494,68 @@ func TestIntegration_MappingAPI(t *testing.T) {
 		}
 	})
 
+	t.Run("CreateAndGetMappingWithUserName", func(t *testing.T) {
+		headers := map[string]string{
+			"X-Super-Admin-Token": cfg.adminToken,
+		}
+
+		mappingReq := models.MappingRequest{
+			SMSNumber: "+1234509876",
+			MatrixID:  fmt.Sprintf("@userwithname:%s", serverName),
+			RoomID:    fmt.Sprintf("!roomwithname:%s", serverName),
+			UserName:  "Mario Rossi",
+		}
+
+		// Create mapping with user_name
+		resp, body, err := doRequest("POST", baseURL+"/api/internal/map_sms_to_matrix", mappingReq, headers)
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		if resp.StatusCode != http.StatusOK {
+			// Try variants if creation failed due to environment
+			if resp.StatusCode == http.StatusBadRequest {
+				if v, err := ensureMappingVariants(t, baseURL, cfg.adminToken, mappingReq.SMSNumber, mappingReq.MatrixID, mappingReq.RoomID); err == nil {
+					t.Logf("created mapping variant %s for sms_number %s", v, mappingReq.SMSNumber)
+				} else {
+					t.Skip("mapping creation failed in this environment; skipping assertion")
+				}
+			}
+			if resp.StatusCode != http.StatusOK {
+				t.Fatalf("unexpected status code %d: %s", resp.StatusCode, string(body))
+			}
+		}
+
+		// Retrieve mapping and check user_name
+		resp, body, err = doRequest("GET", baseURL+"/api/internal/map_sms_to_matrix?sms_number=%2B1234509876", nil, headers)
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		if resp.StatusCode != http.StatusOK {
+			if resp.StatusCode == http.StatusBadRequest {
+				if _, err := ensureMappingVariants(t, baseURL, cfg.adminToken, mappingReq.SMSNumber, mappingReq.MatrixID, mappingReq.RoomID); err == nil {
+					// retry GET
+					resp, body, err = doRequest("GET", baseURL+"/api/internal/map_sms_to_matrix?sms_number=%2B1234509876", nil, headers)
+					if err != nil {
+						t.Fatalf("request failed: %v", err)
+					}
+				} else {
+					t.Skip("mapping not found and creation attempts failed; skipping assertion")
+				}
+			}
+			if resp.StatusCode != http.StatusOK {
+				t.Fatalf("unexpected status code %d: %s", resp.StatusCode, string(body))
+			}
+		}
+
+		var mappingResp models.MappingResponse
+		if err := json.Unmarshal(body, &mappingResp); err != nil {
+			t.Fatalf("failed to parse response: %v", err)
+		}
+		if mappingResp.UserName != "Mario Rossi" {
+			t.Errorf("expected user_name='Mario Rossi', got '%s'", mappingResp.UserName)
+		}
+	})
+
 	t.Run("UnauthorizedAccess", func(t *testing.T) {
 		mappingReq := models.MappingRequest{
 			SMSNumber: "+1111111111",

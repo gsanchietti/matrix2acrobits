@@ -54,6 +54,7 @@ func TestMappingRequest_Marshal(t *testing.T) {
 		SMSNumber: "+1234567890",
 		MatrixID:  "@user:example.com",
 		RoomID:    "!room:example.com",
+		UserName:  "Test User",
 	}
 
 	data, err := json.Marshal(req)
@@ -66,6 +67,7 @@ func TestMappingRequest_Marshal(t *testing.T) {
 	assert.Equal(t, req.SMSNumber, req2.SMSNumber)
 	assert.Equal(t, req.MatrixID, req2.MatrixID)
 	assert.Equal(t, req.RoomID, req2.RoomID)
+	assert.Equal(t, req.UserName, req2.UserName)
 }
 
 func TestMessage_Marshal(t *testing.T) {
@@ -138,6 +140,7 @@ func TestMappingResponse_Marshal(t *testing.T) {
 		SMSNumber: "+1234567890",
 		MatrixID:  "@user:example.com",
 		RoomID:    "!room:example.com",
+		UserName:  "Test User",
 		UpdatedAt: "2025-01-01T00:00:00Z",
 	}
 

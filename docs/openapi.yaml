@@ -229,6 +229,9 @@ components:
         room_id:
           type: string
           description: Matrix room ID where the mapped identifier should route messages.
+        user_name:
+          type: string
+          description: Optional human-friendly name to expose for this mapping (e.g., contact name).
     MappingResponse:
       type: object
       properties:
@@ -238,6 +241,9 @@ components:
           type: string
         room_id:
           type: string
+        user_name:
+          type: string
+          description: Optional human-friendly name associated with the mapping.
         updated_at:
           type: string
           format: date-time

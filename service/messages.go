@@ -350,6 +350,7 @@ func (s *MessageService) SaveMapping(req *models.MappingRequest) (*models.Mappin
 		SMSNumber: smsNumber,
 		MatrixID:  strings.TrimSpace(req.MatrixID),
 		RoomID:    id.RoomID(roomID),
+		UserName:  strings.TrimSpace(req.UserName),
 		UpdatedAt: s.now(),
 	}
 	entry = s.setMapping(entry)
@@ -399,6 +400,7 @@ func (s *MessageService) buildMappingResponse(entry mappingEntry) *models.Mappin
 		SMSNumber: entry.SMSNumber,
 		MatrixID:  entry.MatrixID,
 		RoomID:    string(entry.RoomID),
+		UserName:  entry.UserName,
 		UpdatedAt: entry.UpdatedAt.UTC().Format(time.RFC3339),
 	}
 }

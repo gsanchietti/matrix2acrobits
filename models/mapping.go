@@ -13,5 +13,6 @@ type MappingResponse struct {
 	SMSNumber string `json:"sms_number"`
 	MatrixID  string `json:"matrix_id"`
 	RoomID    string `json:"room_id"`
+	UserName  string `json:"user_name,omitempty"`
 	UpdatedAt string `json:"updated_at"`
 }
