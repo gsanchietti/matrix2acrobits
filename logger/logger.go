@@ -39,7 +39,7 @@ func Init(level Level) {
 
 	zerolog.SetGlobalLevel(zLevel)
 	// Configure zerolog for human-readable output
-	log = zerolog.New(zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.RFC3339}).With().Timestamp().Logger()
+	log = zerolog.New(zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.RFC3339}).Level(zLevel).With().Timestamp().Logger()
 }
 
 // InitWithWriter initializes the logger with a custom writer (useful for testing)
@@ -60,7 +60,7 @@ func InitWithWriter(level Level, w io.Writer) {
 
 	zerolog.SetGlobalLevel(zLevel)
 	// Configure zerolog for human-readable output
-	log = zerolog.New(zerolog.ConsoleWriter{Out: w, TimeFormat: time.RFC3339}).With().Timestamp().Logger()
+	log = zerolog.New(zerolog.ConsoleWriter{Out: w, TimeFormat: time.RFC3339}).Level(zLevel).With().Timestamp().Logger()
 }
 
 // Debug logs a debug message
