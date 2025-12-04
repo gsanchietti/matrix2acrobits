@@ -159,6 +159,10 @@ func (s *MessageService) FetchMessages(ctx context.Context, req *models.FetchMes
 	}
 
 	received, sent := make([]models.Message, 0, 8), make([]models.Message, 0, 8)
+
+	// Resolve the caller's identifier (e.g. "91201")
+	callerIdentifier := s.resolveMatrixIDToIdentifier(string(userID))
+
 	for _, room := range resp.Rooms.Join {
 		// If we are filtering by event ID, check if the event is in this room's timeline.
 		// If it is, we only want events AFTER it.
@@ -179,9 +183,28 @@ func (s *MessageService) FetchMessages(ctx context.Context, req *models.FetchMes
 				continue
 			}
 			msg := convertEvent(evt)
-			// Remap sender from Matrix ID to User name if mapping exists
-			msg.Sender = s.remapMatrixToUserName(msg.Sender)
-			if isSentBy(msg.Sender, string(userID)) {
+
+			// Determine if I sent the message
+			senderMatrixID := msg.Sender
+			isSent := isSentBy(senderMatrixID, string(userID))
+
+			// Remap sender to identifier (e.g. "202" or "91201")
+			msg.Sender = s.resolveMatrixIDToIdentifier(senderMatrixID)
+
+			// Determine Recipient
+			if isSent {
+				// I sent it. Recipient is the other person in the room.
+				other := s.resolveRoomIDToOtherIdentifier(evt.RoomID, string(userID))
+				if other != "" {
+					msg.Recipient = other
+				}
+				// If other not found, msg.Recipient remains RoomID (default from convertEvent)
+			} else {
+				// I received it. Recipient is me.
+				msg.Recipient = callerIdentifier
+			}
+
+			if isSent {
 				sent = append(sent, msg)
 			} else {
 				received = append(received, msg)
@@ -221,36 +244,50 @@ func (s *MessageService) resolveMatrixUser(identifier string) id.UserID {
 	return ""
 }
 
-// remapMatrixToUserName attempts to remap a Matrix user ID to a configured user name if a mapping exists.
-// If a user name is present in the mapping, it is returned. Otherwise, if an  number is
-// configured for the mapping that is a plausible phone number it will be returned. If no mapping
-// is found, returns the original Matrix ID.
-func (s *MessageService) remapMatrixToUserName(matrixID string) string {
+// resolveMatrixIDToIdentifier resolves a Matrix user ID to a preferred identifier (Number, then UserName).
+func (s *MessageService) resolveMatrixIDToIdentifier(matrixID string) string {
 	matrixID = strings.TrimSpace(matrixID)
 
-	// Search through all mappings to find one where MatrixID matches
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	for _, entry := range s.mappings {
 		if strings.EqualFold(entry.MatrixID, matrixID) {
-			if entry.UserName != "" {
-				logger.Debug().Str("matrix_id", matrixID).Str("user_name", entry.UserName).Msg("remapped matrix id to user name")
-				return entry.UserName
+			// Ignore internal mappings (containing pipe)
+			if strings.Contains(entry.Number, "|") {
+				continue
 			}
-			// Fall back to number if it looks like a phone number
-			if isPhoneNumber(entry.Number) {
-				logger.Debug().Str("matrix_id", matrixID).Str("number", entry.Number).Msg("remapped matrix id to number (fallback)")
+			// Prefer Number as the identifier
+			if entry.Number != "" {
+				logger.Debug().Str("matrix_id", matrixID).Str("number", entry.Number).Msg("resolved matrix id to number")
 				return entry.Number
 			}
-			// If we have a MatrixID stored in the entry, prefer returning that normalized value
-			if entry.MatrixID != "" {
-				return entry.MatrixID
+			// Fallback to UserName
+			if entry.UserName != "" {
+				logger.Debug().Str("matrix_id", matrixID).Str("user_name", entry.UserName).Msg("resolved matrix id to user name")
+				return entry.UserName
 			}
 		}
 	}
 
 	// No mapping found, return the original Matrix ID
 	return matrixID
+}
+
+// resolveRoomIDToOtherIdentifier finds the identifier of the "other" participant in a room.
+func (s *MessageService) resolveRoomIDToOtherIdentifier(roomID id.RoomID, myMatrixID string) string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, entry := range s.mappings {
+		// Find mapping for this room where the Matrix ID is NOT me
+		if entry.RoomID == roomID && !strings.EqualFold(entry.MatrixID, myMatrixID) {
+			// Ignore internal mappings
+			if strings.Contains(entry.Number, "|") {
+				continue
+			}
+			return entry.Number
+		}
+	}
+	return ""
 }
 
 func (s *MessageService) ensureDirectRoom(ctx context.Context, actingUserID, targetUserID id.UserID) (id.RoomID, error) {
