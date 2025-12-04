@@ -146,7 +146,7 @@ func startTestServer(cfg *testConfig) (*echo.Echo, error) {
 		return nil, fmt.Errorf("initialize matrix client: %w", err)
 	}
 
-	svc := service.NewMessageService(matrixClient)
+	svc := service.NewMessageService(matrixClient, nil)
 	api.RegisterRoutes(e, svc, cfg.adminToken)
 
 	go func() {

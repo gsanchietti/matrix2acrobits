@@ -18,6 +18,7 @@ The proxy is configured via environment variables. Minimal required env:
 - `AS_USER_ID` (optional): the user ID of the Application Service bot (default: `@_acrobits_proxy:matrix.example`)
 - `LOGLEVEL` (optional): logging verbosity level - `DEBUG`, `INFO`, `WARNING`, `CRITICAL` (default: `INFO`)
 - `MAPPING_FILE` (optional): path to a JSON file containing SMS-to-Matrix mappings to load at startup
+- `PUSH_TOKEN_DB_PATH` (optional): path to a database file for storing push tokens
 
 Building and running
 
@@ -74,10 +75,10 @@ Implemented APIs:
 
 - https://doc.acrobits.net/api/client/fetch_messages_modern.html
 - https://doc.acrobits.net/api/client/send_message.html
+- https://doc.acrobits.net/api/client/push_token_reporter.html
 
 ## TODO
 
 The following features are not yet implemented:
 
 - implement password validation on send messages, currently the password is ignored
-- implement https://doc.acrobits.net/api/client/push_token_reporter.html

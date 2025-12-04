@@ -18,6 +18,7 @@ func RegisterRoutes(e *echo.Echo, svc *service.MessageService, adminToken string
 	h := handler{svc: svc, adminToken: adminToken}
 	e.POST("/api/client/send_message", h.sendMessage)
 	e.POST("/api/client/fetch_messages", h.fetchMessages)
+	e.POST("/api/client/push_token_report", h.pushTokenReport)
 	e.POST("/api/internal/map_sms_to_matrix", h.postMapping)
 	e.GET("/api/internal/map_sms_to_matrix", h.getMapping)
 }
@@ -65,6 +66,25 @@ func (h handler) fetchMessages(c echo.Context) error {
 	}
 
 	logger.Info().Str("endpoint", "fetch_messages").Str("username", req.Username).Int("received", len(resp.ReceivedSMSS)).Int("sent", len(resp.SentSMSS)).Msg("messages fetched successfully")
+	return c.JSON(http.StatusOK, resp)
+}
+
+func (h handler) pushTokenReport(c echo.Context) error {
+	var req models.PushTokenReportRequest
+	if err := c.Bind(&req); err != nil {
+		logger.Warn().Str("endpoint", "push_token_report").Err(err).Msg("invalid request payload")
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid payload")
+	}
+
+	logger.Debug().Str("endpoint", "push_token_report").Str("selector", req.Selector).Msg("processing push token report")
+
+	resp, err := h.svc.ReportPushToken(c.Request().Context(), &req)
+	if err != nil {
+		logger.Error().Str("endpoint", "push_token_report").Str("selector", req.Selector).Err(err).Msg("failed to report push token")
+		return mapServiceError(err)
+	}
+
+	logger.Info().Str("endpoint", "push_token_report").Str("selector", req.Selector).Msg("push token reported successfully")
 	return c.JSON(http.StatusOK, resp)
 }
 

@@ -41,3 +41,15 @@ type Message struct {
 	ContentType string `json:"content_type"`
 	StreamID    string `json:"stream_id"`
 }
+
+// PushTokenReportRequest mirrors the Acrobits push token reporter POST JSON schema.
+type PushTokenReportRequest struct {
+	Selector   string `json:"selector"`
+	TokenMsgs  string `json:"token_msgs"`
+	AppIDMsgs  string `json:"appid_msgs"`
+	TokenCalls string `json:"token_calls"`
+	AppIDCalls string `json:"appid_calls"`
+}
+
+// PushTokenReportResponse is the successful response for push token reporting.
+type PushTokenReportResponse struct{}

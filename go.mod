@@ -4,6 +4,8 @@ go 1.24.10
 
 require (
 	github.com/labstack/echo/v4 v4.13.4
+	github.com/mattn/go-sqlite3 v1.14.32
+	github.com/rs/zerolog v1.34.0
 	github.com/stretchr/testify v1.11.1
 	maunium.net/go/mautrix v0.26.0
 )
@@ -15,7 +17,6 @@ require (
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/rs/zerolog v1.34.0 // indirect
 	github.com/tidwall/gjson v1.18.0 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect

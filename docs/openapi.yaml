@@ -108,6 +108,42 @@ paths:
         '401':
           description: Authentication failed (e.g., user not in AS namespace).
 
+  /api/client/push_token_report:
+    post:
+      summary: Report Push Token
+      operationId: pushTokenReport
+      description: |
+        Receives and stores device push tokens from Acrobits clients.
+        The tokens are persisted in a SQLite database for later use in push notification delivery.
+        This endpoint follows the Acrobits Push Token Reporter API specification for POST JSON requests.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PushTokenReportRequest'
+      responses:
+        '200':
+          description: Push token accepted and stored
+          content:
+            application/json:
+              schema:
+                type: object
+                description: Empty JSON object response
+        '400':
+          description: Invalid request payload (e.g., missing selector).
+        '500':
+          description: Server error (e.g., database unavailable).
+      example:
+        request:
+          selector: "12869E0E6E553673C54F29105A0647204C416A2A:7C3A0D14"
+          token_msgs: "QVBBOTFiRzlhcVd2bW54bllCWldHOWh4dnRrZ3pUWFNvcGZpdWZ6bWM2dFAzS2J"
+          appid_msgs: "com.cloudsoftphone.app"
+          token_calls: "Udl99X2JFP1bWwS5gR/wGeLE1hmAB2CMpr1Ej0wxkrY="
+          appid_calls: "com.cloudsoftphone.app.pushkit"
+        response:
+          {}
+
   /api/internal/map_sms_to_matrix:
     post:
       summary: Register or update an SMS-to-Matrix mapping
@@ -248,4 +284,35 @@ components:
           type: string
           format: date-time
           description: When the mapping was last written.
+    PushTokenReportRequest:
+      type: object
+      required:
+        - selector
+      properties:
+        selector:
+          type: string
+          description: |
+            SHA1 hash with suffix that uniquely identifies the account.
+            Used to reference the account in push notification delivery requests.
+            Example: 12869E0E6E553673C54F29105A0647204C416A2A:7C3A0D14
+        token_msgs:
+          type: string
+          description: |
+            Base64-encoded push token for regular notifications (APNs remote-notification).
+            Required for iOS push notifications.
+        appid_msgs:
+          type: string
+          description: |
+            Apple application ID for regular notifications.
+            Used in conjunction with token_msgs.
+        token_calls:
+          type: string
+          description: |
+            Base64-encoded push token for VoIP/incoming call notifications (APNs pushkit).
+            Required for iOS incoming call notifications.
+        appid_calls:
+          type: string
+          description: |
+            Apple application ID for incoming call notifications.
+            Used in conjunction with token_calls.
 

@@ -6,6 +6,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/nethesis/matrix2acrobits/api"
+	"github.com/nethesis/matrix2acrobits/db"
 	"github.com/nethesis/matrix2acrobits/logger"
 	"github.com/nethesis/matrix2acrobits/matrix"
 	"github.com/nethesis/matrix2acrobits/service"
@@ -65,7 +66,19 @@ func main() {
 		logger.Fatal().Err(err).Msg("failed to initialize matrix client")
 	}
 
-	svc := service.NewMessageService(matrixClient)
+	// Initialize push token database
+	pushTokenDBPath := os.Getenv("PUSH_TOKEN_DB_PATH")
+	if pushTokenDBPath == "" {
+		pushTokenDBPath = "/var/lib/matrix2acrobits/push_tokens.db"
+	}
+
+	pushTokenDB, err := db.NewDatabase(pushTokenDBPath)
+	if err != nil {
+		logger.Fatal().Err(err).Str("path", pushTokenDBPath).Msg("failed to initialize push token database")
+	}
+	defer pushTokenDB.Close()
+
+	svc := service.NewMessageService(matrixClient, pushTokenDB)
 	api.RegisterRoutes(e, svc, adminToken)
 
 	// Load mappings from file if MAPPING_FILE env var is set

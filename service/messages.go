@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/nethesis/matrix2acrobits/db"
 	"github.com/nethesis/matrix2acrobits/logger"
 	"github.com/nethesis/matrix2acrobits/matrix"
 	"github.com/nethesis/matrix2acrobits/models"
@@ -28,6 +29,7 @@ var (
 // MessageService handles sending/fetching messages plus the mapping store.
 type MessageService struct {
 	matrixClient *matrix.MatrixClient
+	pushTokenDB  *db.Database
 	now          func() time.Time
 
 	mu       sync.RWMutex
@@ -42,10 +44,11 @@ type mappingEntry struct {
 	UpdatedAt time.Time
 }
 
-// NewMessageService wires the provided Matrix client into the service layer.
-func NewMessageService(matrixClient *matrix.MatrixClient) *MessageService {
+// NewMessageService wires the provided Matrix client and push token database into the service layer.
+func NewMessageService(matrixClient *matrix.MatrixClient, pushTokenDB *db.Database) *MessageService {
 	return &MessageService{
 		matrixClient: matrixClient,
+		pushTokenDB:  pushTokenDB,
 		now:          time.Now,
 		mappings:     make(map[string]mappingEntry),
 	}
@@ -478,4 +481,39 @@ func isPhoneNumber(s string) bool {
 // isPhoneNumberRune checks if a rune is a valid character in a phone number
 func isPhoneNumberRune(r rune) bool {
 	return (r >= '0' && r <= '9') || r == ' ' || r == '-' || r == '+' || r == '(' || r == ')'
+}
+
+// ReportPushToken saves a push token to the database.
+// It accepts selector, token_msgs, appid_msgs, token_calls, and appid_calls from the Acrobits client.
+func (s *MessageService) ReportPushToken(ctx context.Context, req *models.PushTokenReportRequest) (*models.PushTokenReportResponse, error) {
+	if req == nil {
+		return nil, errors.New("request cannot be nil")
+	}
+
+	selector := strings.TrimSpace(req.Selector)
+	if selector == "" {
+		logger.Warn().Msg("push token report: empty selector")
+		return nil, errors.New("selector is required")
+	}
+
+	if s.pushTokenDB == nil {
+		logger.Warn().Msg("push token report: database not initialized")
+		return nil, errors.New("push token storage not available")
+	}
+
+	// Save to database
+	err := s.pushTokenDB.SavePushToken(
+		selector,
+		req.TokenMsgs,
+		req.AppIDMsgs,
+		req.TokenCalls,
+		req.AppIDCalls,
+	)
+	if err != nil {
+		logger.Error().Err(err).Str("selector", selector).Msg("failed to save push token")
+		return nil, fmt.Errorf("failed to save push token: %w", err)
+	}
+
+	logger.Info().Str("selector", selector).Msg("push token reported and saved")
+	return &models.PushTokenReportResponse{}, nil
 }

@@ -156,7 +156,7 @@ func TestMapAuthErr(t *testing.T) {
 }
 
 func TestListMappings(t *testing.T) {
-	svc := NewMessageService(nil)
+	svc := NewMessageService(nil, nil)
 
 	// Seed two mappings
 	svc.setMapping(mappingEntry{
@@ -291,7 +291,7 @@ func TestLoadMappingsFromFile(t *testing.T) {
 	tmpFile.Close()
 
 	// Create a message service
-	svc := NewMessageService(nil)
+	svc := NewMessageService(nil, nil)
 
 	// Load mappings from file
 	err = svc.LoadMappingsFromFile(tmpFile.Name())
@@ -330,7 +330,7 @@ func TestLoadMappingsFromFile_LegacyFormat(t *testing.T) {
 	tmpFile.Close()
 
 	// Create a message service
-	svc := NewMessageService(nil)
+	svc := NewMessageService(nil, nil)
 
 	// Load mappings from file - should fail since we only support extended format now
 	err = svc.LoadMappingsFromFile(tmpFile.Name())
@@ -339,7 +339,7 @@ func TestLoadMappingsFromFile_LegacyFormat(t *testing.T) {
 }
 
 func TestLoadMappingsFromFile_FileNotFound(t *testing.T) {
-	svc := NewMessageService(nil)
+	svc := NewMessageService(nil, nil)
 
 	err := svc.LoadMappingsFromFile("/nonexistent/file.json")
 	assert.Error(t, err)
@@ -357,9 +357,47 @@ func TestLoadMappingsFromFile_InvalidJSON(t *testing.T) {
 	assert.NoError(t, err)
 	tmpFile.Close()
 
-	svc := NewMessageService(nil)
+	svc := NewMessageService(nil, nil)
 
 	err = svc.LoadMappingsFromFile(tmpFile.Name())
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to parse mapping file")
+}
+
+func TestReportPushToken(t *testing.T) {
+	// Test with nil request
+	t.Run("nil request", func(t *testing.T) {
+		svc := NewMessageService(nil, nil)
+		resp, err := svc.ReportPushToken(nil, nil)
+		assert.Error(t, err)
+		assert.Nil(t, resp)
+	})
+
+	// Test with empty selector
+	t.Run("empty selector", func(t *testing.T) {
+		svc := NewMessageService(nil, nil)
+		req := &models.PushTokenReportRequest{
+			Selector:  "",
+			TokenMsgs: "token123",
+			AppIDMsgs: "com.app",
+		}
+		resp, err := svc.ReportPushToken(nil, req)
+		assert.Error(t, err)
+		assert.Nil(t, resp)
+		assert.Contains(t, err.Error(), "selector is required")
+	})
+
+	// Test with no database
+	t.Run("no database", func(t *testing.T) {
+		svc := NewMessageService(nil, nil)
+		req := &models.PushTokenReportRequest{
+			Selector:  "12869E0E6E553673C54F29105A0647204C416A2A:7C3A0D14",
+			TokenMsgs: "token123",
+			AppIDMsgs: "com.app",
+		}
+		resp, err := svc.ReportPushToken(nil, req)
+		assert.Error(t, err)
+		assert.Nil(t, resp)
+		assert.Contains(t, err.Error(), "push token storage not available")
+	})
 }
