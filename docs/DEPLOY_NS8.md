@@ -83,9 +83,13 @@ sender_localpart: _acrobits_proxy
 namespaces:
   users:
     - exclusive: false
-      regex: '@.*:.*'
-  aliases: []
-  rooms: []
+      regex: '@.*'
+  aliases:
+    - exclusive: false
+      regex: '.*'
+  rooms:
+    - exclusive: false
+      regex: '.*'
 EOF
 
 echo "app_service_config_files:" >> ../templates/synapse-homeserver.yaml

@@ -14,7 +14,10 @@ sender_localpart: _acrobits_proxy
 namespaces:
   users:
     - exclusive: false
-      # This regex gives the proxy control over all users on your homeserver
       regex: '@.*'
-  aliases: []
-  rooms: []
+  aliases:
+    - exclusive: false
+      regex: '.*'
+  rooms:
+    - exclusive: false
+      regex: '.*'

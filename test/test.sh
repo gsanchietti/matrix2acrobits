@@ -211,7 +211,7 @@ run() {
   # Run all tests with coverage first
   echo "Running unit tests and collecting coverage..."
   pushd ..
-  go test ./... -coverprofile=coverage.out
+  go test -v ./... -coverprofile=coverage.out
   popd
 }
 
