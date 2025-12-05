@@ -365,7 +365,6 @@ func TestResolveMatrixUser_SubNumbers(t *testing.T) {
 		svc.SaveMapping(&models.MappingRequest{
 			Number:     201,
 			MatrixID:   "@giacomo:example.com",
-			UserName:   "Giacomo Rossi",
 			SubNumbers: []int{3344, 91201},
 		})
 
@@ -380,7 +379,6 @@ func TestResolveMatrixUser_SubNumbers(t *testing.T) {
 		svc.SaveMapping(&models.MappingRequest{
 			Number:   202,
 			MatrixID: "@mario:example.com",
-			UserName: "Mario Bianchi",
 		})
 
 		// Resolve using the main number
@@ -394,7 +392,6 @@ func TestResolveMatrixUser_SubNumbers(t *testing.T) {
 		svc.SaveMapping(&models.MappingRequest{
 			Number:     201,
 			MatrixID:   "@giacomo:example.com",
-			UserName:   "Giacomo Rossi",
 			SubNumbers: []int{3344, 91201},
 		})
 
@@ -423,7 +420,6 @@ func TestResolveMatrixUser_SubNumbers(t *testing.T) {
 		svc.SaveMapping(&models.MappingRequest{
 			Number:     201,
 			MatrixID:   "@giacomo:example.com",
-			UserName:   "Giacomo Rossi",
 			SubNumbers: []int{3344, 91201},
 		})
 
@@ -441,7 +437,6 @@ func TestResolveMatrixIDToIdentifier_SubNumbers(t *testing.T) {
 		svc.SaveMapping(&models.MappingRequest{
 			Number:     201,
 			MatrixID:   "@giacomo:example.com",
-			UserName:   "Giacomo Rossi",
 			SubNumbers: []int{3344, 91201},
 		})
 
@@ -457,7 +452,6 @@ func TestResolveMatrixIDToIdentifier_SubNumbers(t *testing.T) {
 		svc.SaveMapping(&models.MappingRequest{
 			Number:   202,
 			MatrixID: "@mario:example.com",
-			UserName: "Mario Bianchi",
 		})
 
 		// Resolve using the matrix_id - should return the main number
@@ -472,7 +466,6 @@ func TestResolveMatrixIDToIdentifier_SubNumbers(t *testing.T) {
 		svc.SaveMapping(&models.MappingRequest{
 			Number:     201,
 			MatrixID:   "@giacomo:example.com",
-			UserName:   "Giacomo Rossi",
 			SubNumbers: []int{3344, 91201},
 		})
 
@@ -489,33 +482,13 @@ func TestResolveMatrixIDToIdentifier_SubNumbers(t *testing.T) {
 		svc := NewMessageService(nil, nil)
 		svc.SaveMapping(&models.MappingRequest{
 			Number:     201,
-			MatrixID:   "@giacomo:example.com",
-			UserName:   "Giacomo Rossi",
+			MatrixID:   "@GIACOMO:EXAMPLE.COM",
 			SubNumbers: []int{3344, 91201},
 		})
 
 		// Try with uppercase
 		result := svc.resolveMatrixIDToIdentifier("@GIACOMO:EXAMPLE.COM")
 		assert.Equal(t, "201", result, "should match case-insensitively")
-	})
-
-	// Test case 5: Fallback to UserName when no sub_numbers or main number
-	// If matrix_id doesn't match main number but UserName is set, return UserName
-	t.Run("fallback to user name", func(t *testing.T) {
-		svc := NewMessageService(nil, nil)
-		// Create a mapping with matrix_id, number, and username
-		entry := mappingEntry{
-			Number:     999,
-			MatrixID:   "@test:example.com",
-			UserName:   "Test User",
-			SubNumbers: []int{},
-			UpdatedAt:  svc.now(),
-		}
-		svc.setMapping(entry)
-
-		// The matrix_id should match and we should get the number (not the username, since number is preferred)
-		result := svc.resolveMatrixIDToIdentifier("@test:example.com")
-		assert.Equal(t, "999", result, "should return number when available, preferring it over username")
 	})
 
 	// Test case 6: No mapping found, return original matrix_id

@@ -4,7 +4,6 @@ package models
 type MappingRequest struct {
 	Number     int    `json:"number"`
 	MatrixID   string `json:"matrix_id,omitempty"`
-	UserName   string `json:"user_name,omitempty"`
 	SubNumbers []int  `json:"sub_numbers,omitempty"`
 }
 
@@ -12,7 +11,6 @@ type MappingRequest struct {
 type MappingResponse struct {
 	Number     int    `json:"number"`
 	MatrixID   string `json:"matrix_id"`
-	UserName   string `json:"user_name,omitempty"`
 	SubNumbers []int  `json:"sub_numbers,omitempty"`
 	UpdatedAt  string `json:"updated_at"`
 }

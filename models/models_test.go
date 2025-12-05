@@ -53,7 +53,6 @@ func TestMappingRequest_Marshal(t *testing.T) {
 	req := MappingRequest{
 		Number:   1234567890,
 		MatrixID: "@user:example.com",
-		UserName: "Test User",
 	}
 
 	data, err := json.Marshal(req)
@@ -65,7 +64,6 @@ func TestMappingRequest_Marshal(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, req.Number, req2.Number)
 	assert.Equal(t, req.MatrixID, req2.MatrixID)
-	assert.Equal(t, req.UserName, req2.UserName)
 }
 
 func TestMessage_Marshal(t *testing.T) {
@@ -137,7 +135,6 @@ func TestMappingResponse_Marshal(t *testing.T) {
 	resp := MappingResponse{
 		Number:    1234567890,
 		MatrixID:  "@user:example.com",
-		UserName:  "Test User",
 		UpdatedAt: "2025-01-01T00:00:00Z",
 	}
 

@@ -269,11 +269,12 @@ func (s *MessageService) resolveMatrixUser(identifier string) id.UserID {
 	// Could not resolve
 	logger.Warn().Str("identifier", identifier).Msg("identifier could not be resolved to a Matrix user ID")
 	return ""
-} // resolveMatrixIDToIdentifier resolves a Matrix user ID to a preferred identifier (Number, then UserName).
+}
+
+// resolveMatrixIDToIdentifier resolves a Matrix user ID to a number
 // The resolution logic:
 //   - First checks if any sub_number matches the matrix_id; if found, returns the main number
 //   - Then checks if the main number matches the matrix_id; if found, returns the number
-//   - Falls back to UserName if available
 //   - Returns the original Matrix ID if no mapping is found
 //
 // Sub_numbers are never returned directly; if a sub_number is matched, the main number is returned instead.
@@ -288,11 +289,6 @@ func (s *MessageService) resolveMatrixIDToIdentifier(matrixID string) string {
 			if entry.Number != 0 {
 				logger.Debug().Str("matrix_id", matrixID).Int("number", entry.Number).Msg("resolved matrix id to number")
 				return fmt.Sprintf("%d", entry.Number)
-			}
-			// Fallback to UserName
-			if entry.UserName != "" {
-				logger.Debug().Str("matrix_id", matrixID).Str("user_name", entry.UserName).Msg("resolved matrix id to user name")
-				return entry.UserName
 			}
 		}
 	}
@@ -442,7 +438,6 @@ func (s *MessageService) SaveMapping(req *models.MappingRequest) (*models.Mappin
 	entry := mappingEntry{
 		Number:     req.Number,
 		MatrixID:   strings.TrimSpace(req.MatrixID),
-		UserName:   strings.TrimSpace(req.UserName),
 		SubNumbers: req.SubNumbers,
 		UpdatedAt:  s.now(),
 	}
@@ -470,7 +465,6 @@ func (s *MessageService) LoadMappingsFromFile(filePath string) error {
 		entry := mappingEntry{
 			Number:     req.Number,
 			MatrixID:   req.MatrixID,
-			UserName:   req.UserName,
 			SubNumbers: req.SubNumbers,
 			UpdatedAt:  s.now(),
 		}
@@ -485,7 +479,6 @@ func (s *MessageService) buildMappingResponse(entry mappingEntry) *models.Mappin
 	return &models.MappingResponse{
 		Number:     entry.Number,
 		MatrixID:   entry.MatrixID,
-		UserName:   entry.UserName,
 		SubNumbers: entry.SubNumbers,
 		UpdatedAt:  entry.UpdatedAt.UTC().Format(time.RFC3339),
 	}
