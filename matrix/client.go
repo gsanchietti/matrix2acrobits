@@ -208,5 +208,20 @@ func (mc *MatrixClient) GetRoomAliases(ctx context.Context, roomID id.RoomID) []
 	for _, a := range resp.Aliases {
 		aliases = append(aliases, string(a))
 	}
+	logger.Debug().Str("room_id", roomID.String()).Int("alias_count", len(aliases)).Msg("matrix: fetched room aliases")
 	return aliases
+}
+
+func (mc *MatrixClient) ListJoinedRooms(ctx context.Context, userID id.UserID) ([]id.RoomID, error) {
+	mc.mu.Lock()
+	defer mc.mu.Unlock()
+
+	mc.cli.UserID = userID
+	resp, err := mc.cli.JoinedRooms(ctx)
+	if err != nil {
+		logger.Debug().Str("user_id", string(userID)).Err(err).Msg("matrix: failed to list joined rooms")
+		return nil, err
+	}
+	logger.Debug().Str("user_id", string(userID)).Int("joined_room_count", len(resp.JoinedRooms)).Msg("matrix: fetched joined rooms")
+	return resp.JoinedRooms, nil
 }

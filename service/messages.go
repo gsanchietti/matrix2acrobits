@@ -134,6 +134,19 @@ func (s *MessageService) FetchMessages(ctx context.Context, req *models.FetchMes
 
 	logger.Debug().Str("user_id", string(userID)).Msg("syncing messages from matrix")
 
+	rooms, err := s.matrixClient.ListJoinedRooms(ctx, userID)
+	if err != nil {
+		logger.Error().Str("user_id", string(userID)).Err(err).Msg("failed to list joined rooms")
+	} else {
+		logger.Debug().Str("user_id", string(userID)).Int("joined_room_count", len(rooms)).Msg("fetched joined rooms")
+
+		// Print each joined room (stdout) and also log them for debug
+		for _, r := range rooms {
+			fmt.Println(r)
+			logger.Debug().Str("room_id", string(r)).Msg("joined room")
+		}
+	}
+
 	resp, err := s.matrixClient.Sync(ctx, userID)
 	if err != nil {
 		// If the token is invalid (e.g. expired or from a different session), retry with a full sync.
