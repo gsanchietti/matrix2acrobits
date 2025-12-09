@@ -2,6 +2,7 @@ package api
 
 import (
 	"errors"
+	"io"
 	"net/http"
 	"strings"
 
@@ -27,6 +28,8 @@ func RegisterRoutes(e *echo.Echo, svc *service.MessageService, pushSvc *service.
 
 	// Matrix Push Gateway API
 	e.POST("/_matrix/push/v1/notify", h.matrixPushNotify)
+	// Matrix Application Service transactions (push events to AS)
+	e.PUT("/_matrix/app/v1/transactions/:txnId", h.matrixAppTransaction)
 }
 
 type handler struct {
@@ -260,4 +263,21 @@ func (h handler) matrixPushNotify(c echo.Context) error {
 
 	logger.Info().Str("endpoint", "matrix_push_notify").Int("rejected_count", len(resp.Rejected)).Msg("matrix push notification processed")
 	return c.JSON(http.StatusOK, resp)
+}
+
+// matrixAppTransaction handles incoming Application Service transactions from homeservers.
+// It logs the received payload for debugging and returns HTTP 200 as required by the spec.
+func (h handler) matrixAppTransaction(c echo.Context) error {
+	txnId := c.Param("txnId")
+	// Read raw body
+	bodyBytes, err := io.ReadAll(c.Request().Body)
+	if err != nil {
+		logger.Error().Str("endpoint", "matrix_app_transaction").Str("txn_id", txnId).Err(err).Msg("failed to read request body")
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid payload")
+	}
+
+	logger.Debug().Str("endpoint", "matrix_app_transaction").Str("txn_id", txnId).Str("payload", string(bodyBytes)).Msg("received application service transaction")
+
+	// As per spec, simply acknowledge with 200 OK.
+	return c.NoContent(http.StatusOK)
 }

@@ -291,6 +291,33 @@ paths:
           description: Invalid request payload
         '500':
           description: Server error while processing notification
+  /_matrix/app/v1/transactions/{txnId}:
+    put:
+      summary: Application Service Transaction
+      description: |
+        Endpoint used by a Matrix homeserver to deliver application-service transactions
+        (batches of events) to the Application Service. The proxy accepts the payload,
+        logs it for debugging and acknowledges with 200 OK.
+      parameters:
+        - in: path
+          name: txnId
+          required: true
+          schema:
+            type: string
+          description: Transaction id assigned by the homeserver
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Application Service transaction payload (events array and other fields)
+              additionalProperties: true
+      responses:
+        '200':
+          description: Transaction received and acknowledged
+        '400':
+          description: Invalid payload
 components:
   schemas:
     SMS:
