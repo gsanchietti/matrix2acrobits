@@ -32,6 +32,7 @@ type MessageService struct {
 	matrixClient *matrix.MatrixClient
 	pushTokenDB  *db.Database
 	now          func() time.Time
+	proxyURL     string // Public-facing URL of this proxy (e.g., https://matrix-proxy.example.com)
 
 	mu          sync.RWMutex
 	mappings    map[string]mappingEntry
@@ -53,7 +54,7 @@ type mappingEntry struct {
 }
 
 // NewMessageService wires the provided Matrix client and push token database into the service layer.
-func NewMessageService(matrixClient *matrix.MatrixClient, pushTokenDB *db.Database) *MessageService {
+func NewMessageService(matrixClient *matrix.MatrixClient, pushTokenDB *db.Database, proxyURL string) *MessageService {
 	// Parse cache TTL from environment, default to 1 hour (3600 seconds)
 	cacheTTLStr := os.Getenv("CACHE_TTL_SECONDS")
 	cacheTTLSeconds := 3600
@@ -69,6 +70,7 @@ func NewMessageService(matrixClient *matrix.MatrixClient, pushTokenDB *db.Databa
 		matrixClient:         matrixClient,
 		pushTokenDB:          pushTokenDB,
 		now:                  time.Now,
+		proxyURL:             proxyURL,
 		mappings:             make(map[string]mappingEntry),
 		batchTokens:          make(map[string]string),
 		roomAliasCache:       NewRoomAliasCache(cacheTTL),
@@ -639,6 +641,12 @@ func (s *MessageService) ReportPushToken(ctx context.Context, req *models.PushTo
 		return nil, errors.New("request cannot be nil")
 	}
 
+	userName := strings.TrimSpace(req.UserName)
+	if userName == "" {
+		logger.Warn().Msg("push token report: empty username")
+		return nil, errors.New("username is required")
+	}
+
 	selector := strings.TrimSpace(req.Selector)
 	if selector == "" {
 		logger.Warn().Msg("push token report: empty selector")
@@ -664,6 +672,54 @@ func (s *MessageService) ReportPushToken(ctx context.Context, req *models.PushTo
 	}
 
 	logger.Info().Str("selector", selector).Msg("push token reported and saved")
+
+	// Register pusher with Matrix homeserver if we have a push token and proxy URL configured
+	if s.proxyURL != "" && req.TokenMsgs != "" {
+		// Resolve selector to Matrix user ID
+		matrixUserID := s.resolveMatrixUser(userName)
+		if matrixUserID == "" {
+			logger.Warn().Str("selector", selector).Msg("could not resolve selector to Matrix user ID for pusher registration")
+		} else {
+			// Construct pusher registration request
+			httpKind := "http"
+			pusherReq := &models.SetPusherRequest{
+				AppDisplayName:    req.AppIDMsgs, // Use app ID as display name
+				AppID:             req.AppIDMsgs,
+				Append:            false, // Replace existing pushers for this app_id/pushkey combination
+				DeviceDisplayName: "Acrobits Softphone",
+				Kind:              &httpKind,
+				Lang:              "en",
+				Pushkey:           req.TokenMsgs,
+				Data: &models.PusherData{
+					Format: "event_id_only",
+					URL:    strings.TrimSuffix(s.proxyURL, "/") + "/_matrix/push/v1/notify",
+				},
+			}
+
+			// Call Matrix client to register pusher
+			err = s.matrixClient.SetPusher(ctx, matrixUserID, pusherReq)
+			if err != nil {
+				// Log error but don't fail the request - push token was still saved
+				logger.Error().
+					Err(err).
+					Str("selector", selector).
+					Str("matrix_user_id", string(matrixUserID)).
+					Str("pushkey", req.TokenMsgs).
+					Str("gateway_url", pusherReq.Data.URL).
+					Msg("failed to register pusher with Matrix homeserver")
+			} else {
+				logger.Info().
+					Str("selector", selector).
+					Str("matrix_user_id", string(matrixUserID)).
+					Str("pushkey", req.TokenMsgs).
+					Str("gateway_url", pusherReq.Data.URL).
+					Msg("successfully registered pusher with Matrix homeserver")
+			}
+		}
+	} else if s.proxyURL == "" {
+		logger.Debug().Msg("PROXY_URL not configured, skipping pusher registration with Matrix")
+	}
+
 	return &models.PushTokenReportResponse{}, nil
 }
 

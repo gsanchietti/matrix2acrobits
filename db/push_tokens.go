@@ -125,6 +125,32 @@ func (d *Database) GetPushToken(selector string) (*PushToken, error) {
 	return &pt, nil
 }
 
+// GetPushTokenByPushkey retrieves a push token by the actual device token (pushkey).
+// The pushkey can be either token_msgs or token_calls.
+func (d *Database) GetPushTokenByPushkey(pushkey string) (*PushToken, error) {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+
+	var pt PushToken
+	query := `
+	SELECT id, selector, token_msgs, appid_msgs, token_calls, appid_calls, created_at, updated_at
+	FROM push_tokens
+	WHERE token_msgs = ? OR token_calls = ?;
+	`
+
+	err := d.db.QueryRow(query, pushkey, pushkey).Scan(
+		&pt.ID, &pt.Selector, &pt.TokenMsgs, &pt.AppIDMsgs, &pt.TokenCalls, &pt.AppIDCalls, &pt.CreatedAt, &pt.UpdatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get push token by pushkey: %w", err)
+	}
+
+	return &pt, nil
+}
+
 // DeletePushToken removes a push token by selector.
 func (d *Database) DeletePushToken(selector string) error {
 	d.mu.Lock()

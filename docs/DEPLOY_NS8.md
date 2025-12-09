@@ -104,7 +104,7 @@ systemctl --user restart dex
 
 Run the container:
 ```
-podman run --rm --replace --name matrix2acrobits --network host -e MATRIX_HOMESERVER_URL=https://synapse.gs.nethserver.net -e SUPER_ADMIN_TOKEN=secret -e PROXY_PORT=8080 -e AS_USER_ID=@_acrobits_proxy:synapse.gs.nethserver.net ghcr.io/nethesis/matrix2acrobits
+podman run --rm --replace --name matrix2acrobits --network host -e MATRIX_HOMESERVER_URL=https://synapse.gs.nethserver.net -e SUPER_ADMIN_TOKEN=secret -e PROXY_PORT=8080 -e AS_USER_ID=@_acrobits_proxy:synapse.gs.nethserver.net -e PUSH_TOKEN_DB_PATH=/tmp/test.db -e PROXY_URL=https://synapse.gs.nethserver.net ghcr.io/nethesis/matrix2acrobits
 ```
 
 
@@ -117,6 +117,8 @@ podman run --rm --replace --name matrix2acrobits --network host \
   -e PROXY_PORT=8080 \
   -e AS_USER_ID=@_acrobits_proxy:synapse.gs.nethserver.net \
   -e MAPPING_FILE=/mappings.json \
+  -e PUSH_TOKEN_DB_PATH=/tmp/test.db \
+  -e PROXY_URL=https://synapse.gs.nethserver.net \
   ghcr.io/nethesis/matrix2acrobits
 ```
 
@@ -126,6 +128,13 @@ Configure traefik to route /m2a to the proxy:
 ```
 api-cli run set-route  --agent module/traefik1 --data '{"instance": "matrix1-m2a", "name":"synapse-m2a","host":"synapse.gs.nethserver.net","path":"/m2a","url":"http://localhost:8080","lets_encrypt":true, "strip_prefix": true}'
 ```
+
+Configure traefik to route /_matrix/push/v1/notify to the proxy:
+```
+api-cli run set-route  --agent module/traefik1 --data '{"instance": "matrix1-push", "name":"synapse-push","host":"synapse.gs.nethserver.net","path":"/_matrix/push/v1/notify","url":"http://localhost:8080","lets_encrypt":true, "strip_prefix": false}'
+```
+
+
 
 Now:
 - login to Element with the first user (giacomo)

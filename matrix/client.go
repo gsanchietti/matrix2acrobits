@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/nethesis/matrix2acrobits/logger"
+	"github.com/nethesis/matrix2acrobits/models"
 	"maunium.net/go/mautrix"
 	"maunium.net/go/mautrix/event"
 	"maunium.net/go/mautrix/id"
@@ -207,4 +208,42 @@ func (mc *MatrixClient) ListJoinedRooms(ctx context.Context, userID id.UserID) (
 	}
 	logger.Debug().Str("user_id", string(userID)).Int("joined_room_count", len(resp.JoinedRooms)).Msg("matrix: fetched joined rooms")
 	return resp.JoinedRooms, nil
+}
+
+// SetPusher registers or updates a push gateway for the specified user.
+// This is used to configure Matrix to send push notifications to the proxy's /_matrix/push/v1/notify endpoint.
+func (mc *MatrixClient) SetPusher(ctx context.Context, userID id.UserID, req *models.SetPusherRequest) error {
+	mc.mu.Lock()
+	defer mc.mu.Unlock()
+
+	logger.Debug().
+		Str("user_id", string(userID)).
+		Str("pushkey", req.Pushkey).
+		Str("app_id", req.AppID).
+		Interface("kind", req.Kind).
+		Msg("matrix: setting pusher")
+
+	mc.cli.UserID = userID
+
+	// Construct the URL path for the pusher endpoint
+	urlPath := mc.cli.BuildClientURL("v3", "pushers", "set")
+
+	// Make the POST request
+	_, err := mc.cli.MakeRequest(ctx, http.MethodPost, urlPath, req, nil)
+	if err != nil {
+		logger.Error().
+			Str("user_id", string(userID)).
+			Str("pushkey", req.Pushkey).
+			Str("app_id", req.AppID).
+			Err(err).
+			Msg("matrix: failed to set pusher")
+		return fmt.Errorf("set pusher: %w", err)
+	}
+
+	logger.Info().
+		Str("user_id", string(userID)).
+		Str("pushkey", req.Pushkey).
+		Str("app_id", req.AppID).
+		Msg("matrix: pusher set successfully")
+	return nil
 }

@@ -48,6 +48,7 @@ type SMS struct {
 
 // PushTokenReportRequest mirrors the Acrobits push token reporter POST JSON schema.
 type PushTokenReportRequest struct {
+	UserName   string `json:"username"`
 	Selector   string `json:"selector"`
 	TokenMsgs  string `json:"token_msgs"`
 	AppIDMsgs  string `json:"appid_msgs"`

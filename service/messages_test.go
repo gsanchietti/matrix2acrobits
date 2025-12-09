@@ -5,8 +5,10 @@ import (
 	"os"
 	"testing"
 
+	"github.com/nethesis/matrix2acrobits/db"
 	"github.com/nethesis/matrix2acrobits/models"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewMessageService(t *testing.T) {
@@ -157,7 +159,7 @@ func TestMapAuthErr(t *testing.T) {
 }
 
 func TestListMappings(t *testing.T) {
-	svc := NewMessageService(nil, nil)
+	svc := NewMessageService(nil, nil, "")
 
 	// Seed two mappings
 	svc.setMapping(mappingEntry{
@@ -278,7 +280,7 @@ func TestLoadMappingsFromFile(t *testing.T) {
 	tmpFile.Close()
 
 	// Create a message service
-	svc := NewMessageService(nil, nil)
+	svc := NewMessageService(nil, nil, "")
 
 	// Load mappings from file
 	err = svc.LoadMappingsFromFile(tmpFile.Name())
@@ -324,7 +326,7 @@ func TestLoadMappingsFromFile_LegacyFormat(t *testing.T) {
 	tmpFile.Close()
 
 	// Create a message service
-	svc := NewMessageService(nil, nil)
+	svc := NewMessageService(nil, nil, "")
 
 	// Load mappings from file - should fail since we only support extended format now
 	err = svc.LoadMappingsFromFile(tmpFile.Name())
@@ -333,7 +335,7 @@ func TestLoadMappingsFromFile_LegacyFormat(t *testing.T) {
 }
 
 func TestLoadMappingsFromFile_FileNotFound(t *testing.T) {
-	svc := NewMessageService(nil, nil)
+	svc := NewMessageService(nil, nil, "")
 
 	err := svc.LoadMappingsFromFile("/nonexistent/file.json")
 	assert.Error(t, err)
@@ -351,7 +353,7 @@ func TestLoadMappingsFromFile_InvalidJSON(t *testing.T) {
 	assert.NoError(t, err)
 	tmpFile.Close()
 
-	svc := NewMessageService(nil, nil)
+	svc := NewMessageService(nil, nil, "")
 
 	err = svc.LoadMappingsFromFile(tmpFile.Name())
 	assert.Error(t, err)
@@ -361,7 +363,7 @@ func TestLoadMappingsFromFile_InvalidJSON(t *testing.T) {
 func TestResolveMatrixUser_SubNumbers(t *testing.T) {
 	// Test case 1: Resolve sub_number to matrix_id
 	t.Run("resolve sub_number to matrix_id", func(t *testing.T) {
-		svc := NewMessageService(nil, nil)
+		svc := NewMessageService(nil, nil, "")
 		svc.SaveMapping(&models.MappingRequest{
 			Number:     201,
 			MatrixID:   "@giacomo:example.com",
@@ -375,7 +377,7 @@ func TestResolveMatrixUser_SubNumbers(t *testing.T) {
 
 	// Test case 2: Resolve main number to matrix_id
 	t.Run("resolve main number to matrix_id", func(t *testing.T) {
-		svc := NewMessageService(nil, nil)
+		svc := NewMessageService(nil, nil, "")
 		svc.SaveMapping(&models.MappingRequest{
 			Number:   202,
 			MatrixID: "@mario:example.com",
@@ -388,7 +390,7 @@ func TestResolveMatrixUser_SubNumbers(t *testing.T) {
 
 	// Test case 3: Resolve another sub_number
 	t.Run("resolve another sub_number", func(t *testing.T) {
-		svc := NewMessageService(nil, nil)
+		svc := NewMessageService(nil, nil, "")
 		svc.SaveMapping(&models.MappingRequest{
 			Number:     201,
 			MatrixID:   "@giacomo:example.com",
@@ -402,21 +404,21 @@ func TestResolveMatrixUser_SubNumbers(t *testing.T) {
 
 	// Test case 4: Matrix ID passed directly
 	t.Run("matrix id passed directly", func(t *testing.T) {
-		svc := NewMessageService(nil, nil)
+		svc := NewMessageService(nil, nil, "")
 		result := svc.resolveMatrixUser("@test:example.com")
 		assert.Equal(t, "@test:example.com", string(result), "should return matrix_id as-is if it starts with @")
 	})
 
 	// Test case 5: No mapping found
 	t.Run("no mapping found", func(t *testing.T) {
-		svc := NewMessageService(nil, nil)
+		svc := NewMessageService(nil, nil, "")
 		result := svc.resolveMatrixUser("9999")
 		assert.Equal(t, "", string(result), "should return empty string if no mapping found")
 	})
 
 	// Test case 6: Case insensitivity
 	t.Run("case insensitive sub_number resolution", func(t *testing.T) {
-		svc := NewMessageService(nil, nil)
+		svc := NewMessageService(nil, nil, "")
 		svc.SaveMapping(&models.MappingRequest{
 			Number:     201,
 			MatrixID:   "@giacomo:example.com",
@@ -433,7 +435,7 @@ func TestResolveMatrixIDToIdentifier_SubNumbers(t *testing.T) {
 	// Test case 1: Resolve via sub_number match
 	// When a matrix_id matches one of the sub_numbers, the main number should be returned (not the sub_number)
 	t.Run("resolve via sub_number match", func(t *testing.T) {
-		svc := NewMessageService(nil, nil)
+		svc := NewMessageService(nil, nil, "")
 		svc.SaveMapping(&models.MappingRequest{
 			Number:     201,
 			MatrixID:   "@giacomo:example.com",
@@ -448,7 +450,7 @@ func TestResolveMatrixIDToIdentifier_SubNumbers(t *testing.T) {
 	// Test case 2: Resolve via main number
 	// When a matrix_id matches the main number field, return that number
 	t.Run("resolve via main number", func(t *testing.T) {
-		svc := NewMessageService(nil, nil)
+		svc := NewMessageService(nil, nil, "")
 		svc.SaveMapping(&models.MappingRequest{
 			Number:   202,
 			MatrixID: "@mario:example.com",
@@ -462,7 +464,7 @@ func TestResolveMatrixIDToIdentifier_SubNumbers(t *testing.T) {
 	// Test case 3: Sub_numbers should never be returned directly
 	// This is ensured by the logic that checks sub_numbers first, then returns the main number
 	t.Run("sub_numbers never returned directly", func(t *testing.T) {
-		svc := NewMessageService(nil, nil)
+		svc := NewMessageService(nil, nil, "")
 		svc.SaveMapping(&models.MappingRequest{
 			Number:     201,
 			MatrixID:   "@giacomo:example.com",
@@ -479,7 +481,7 @@ func TestResolveMatrixIDToIdentifier_SubNumbers(t *testing.T) {
 	// Test case 4: Case insensitivity
 	// Matrix IDs should be matched case-insensitively
 	t.Run("case insensitivity", func(t *testing.T) {
-		svc := NewMessageService(nil, nil)
+		svc := NewMessageService(nil, nil, "")
 		svc.SaveMapping(&models.MappingRequest{
 			Number:     201,
 			MatrixID:   "@GIACOMO:EXAMPLE.COM",
@@ -493,7 +495,7 @@ func TestResolveMatrixIDToIdentifier_SubNumbers(t *testing.T) {
 
 	// Test case 6: No mapping found, return original matrix_id
 	t.Run("no mapping returns original matrix_id", func(t *testing.T) {
-		svc := NewMessageService(nil, nil)
+		svc := NewMessageService(nil, nil, "")
 		result := svc.resolveMatrixIDToIdentifier("@unknown:example.com")
 		assert.Equal(t, "@unknown:example.com", result, "should return original matrix_id when no mapping found")
 	})
@@ -502,7 +504,7 @@ func TestResolveMatrixIDToIdentifier_SubNumbers(t *testing.T) {
 func TestReportPushToken(t *testing.T) {
 	// Test with nil request
 	t.Run("nil request", func(t *testing.T) {
-		svc := NewMessageService(nil, nil)
+		svc := NewMessageService(nil, nil, "")
 		resp, err := svc.ReportPushToken(context.TODO(), nil)
 		assert.Error(t, err)
 		assert.Nil(t, resp)
@@ -510,8 +512,9 @@ func TestReportPushToken(t *testing.T) {
 
 	// Test with empty selector
 	t.Run("empty selector", func(t *testing.T) {
-		svc := NewMessageService(nil, nil)
+		svc := NewMessageService(nil, nil, "")
 		req := &models.PushTokenReportRequest{
+			UserName:  "@alice:example.com",
 			Selector:  "",
 			TokenMsgs: "token123",
 			AppIDMsgs: "com.app",
@@ -524,8 +527,9 @@ func TestReportPushToken(t *testing.T) {
 
 	// Test with no database
 	t.Run("no database", func(t *testing.T) {
-		svc := NewMessageService(nil, nil)
+		svc := NewMessageService(nil, nil, "")
 		req := &models.PushTokenReportRequest{
+			UserName:  "@alice:example.com",
 			Selector:  "12869E0E6E553673C54F29105A0647204C416A2A:7C3A0D14",
 			TokenMsgs: "token123",
 			AppIDMsgs: "com.app",
@@ -534,5 +538,58 @@ func TestReportPushToken(t *testing.T) {
 		assert.Error(t, err)
 		assert.Nil(t, resp)
 		assert.Contains(t, err.Error(), "push token storage not available")
+	})
+
+	// Test with valid database but no proxy URL (should succeed without pusher registration)
+	t.Run("valid database without pusher registration", func(t *testing.T) {
+		db, err := db.NewDatabase(":memory:")
+		require.NoError(t, err)
+		defer db.Close()
+
+		svc := NewMessageService(nil, db, "")
+		req := &models.PushTokenReportRequest{
+			UserName:   "@alice:example.com",
+			Selector:   "@alice:example.com",
+			TokenMsgs:  "token123",
+			AppIDMsgs:  "com.acrobits.softphone",
+			TokenCalls: "token456",
+			AppIDCalls: "com.acrobits.softphone",
+		}
+		resp, err := svc.ReportPushToken(context.TODO(), req)
+		assert.NoError(t, err)
+		assert.NotNil(t, resp)
+
+		// Verify token was saved
+		savedToken, err := db.GetPushToken("@alice:example.com")
+		require.NoError(t, err)
+		assert.NotNil(t, savedToken)
+		assert.Equal(t, "token123", savedToken.TokenMsgs)
+	})
+
+	// Test with both messages and calls tokens
+	t.Run("with both messages and calls tokens", func(t *testing.T) {
+		db, err := db.NewDatabase(":memory:")
+		require.NoError(t, err)
+		defer db.Close()
+
+		svc := NewMessageService(nil, db, "")
+		req := &models.PushTokenReportRequest{
+			UserName:   "@alice:example.com",
+			Selector:   "@alice:example.com",
+			TokenMsgs:  "token123",
+			AppIDMsgs:  "com.acrobits.softphone",
+			TokenCalls: "token456",
+			AppIDCalls: "com.acrobits.softphone",
+		}
+		resp, err := svc.ReportPushToken(context.TODO(), req)
+		assert.NoError(t, err)
+		assert.NotNil(t, resp)
+
+		// Verify both tokens were saved
+		savedToken, err := db.GetPushToken("@alice:example.com")
+		require.NoError(t, err)
+		assert.NotNil(t, savedToken)
+		assert.Equal(t, "token123", savedToken.TokenMsgs)
+		assert.Equal(t, "token456", savedToken.TokenCalls)
 	})
 }

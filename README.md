@@ -16,6 +16,7 @@ The proxy is configured via environment variables. Minimal required env:
 - `SUPER_ADMIN_TOKEN`: the Application Service `as_token` from your registration file
 - `PROXY_PORT` (optional): port to listen on (default: `8080`)
 - `AS_USER_ID` (optional): the user ID of the Application Service bot (default: `@_acrobits_proxy:matrix.example`)
+- `PROXY_URL` (optional): public-facing URL of this proxy (e.g. `https://matrix-proxy.example.com`) - **required for push notification support**
 - `LOGLEVEL` (optional): logging verbosity level - `DEBUG`, `INFO`, `WARNING`, `CRITICAL` (default: `INFO`)
 - `MAPPING_FILE` (optional): path to a JSON file containing -to-Matrix mappings to load at startup
 - `PUSH_TOKEN_DB_PATH` (optional): path to a database file for storing push tokens
@@ -32,6 +33,7 @@ export MATRIX_HOMESERVER_URL="https://matrix.your-homeserver-name.com"
 export SUPER_ADMIN_TOKEN="YOUR_SECURE_APPLICATION_SERVICE_TOKEN"
 export PROXY_PORT=8080
 export AS_USER_ID="@_acrobits_proxy:your-homeserver-name.com"
+export PROXY_URL="https://matrix-proxy.your-homeserver-name.com"  # For push notifications
 export LOGLEVEL=INFO
 ./matrix2acrobits
 ```
@@ -67,6 +69,8 @@ The loaded mappings will be logged at startup with the message: `mappings loaded
 - [Deploying with NS8](docs/DEPLOY_NS8.md)
 - [OpenAPI Specification](docs/openapi.yaml)
 - [Container Build & Usage](docs/CONTAINER.md)
+- [Direct messaging](docs/DIRECT_ROOMS-ALIASES.md)
+- [Push Notifications](docs/PUSH_NOTIFICATIONS.md)
 - [Testing](test/README.md)
 
 
@@ -83,4 +87,5 @@ Implemented APIs:
 The following features are not yet implemented:
 
 - sendMessage: implement password validation on send messages, currently the password is ignored
-- push tokens to Acrobits
+- when a private room is deleted, there is no way to send messages to the user
+- implement https://doc.acrobits.net/api/client/account_removal_reporter.html#account-removal-reporter-webservice

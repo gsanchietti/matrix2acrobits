@@ -78,8 +78,17 @@ func main() {
 	}
 	defer pushTokenDB.Close()
 
-	svc := service.NewMessageService(matrixClient, pushTokenDB)
-	api.RegisterRoutes(e, svc, adminToken, pushTokenDB)
+	// Get proxy URL for pusher registration
+	proxyURL := os.Getenv("PROXY_URL")
+	if proxyURL == "" {
+		logger.Warn().Msg("PROXY_URL not configured - pusher registration with Matrix will be skipped")
+	} else {
+		logger.Info().Str("proxy_url", proxyURL).Msg("proxy URL configured for pusher registration")
+	}
+
+	svc := service.NewMessageService(matrixClient, pushTokenDB, proxyURL)
+	pushSvc := service.NewPushService(pushTokenDB)
+	api.RegisterRoutes(e, svc, pushSvc, adminToken, pushTokenDB)
 
 	// Load mappings from file if MAPPING_FILE env var is set
 	mappingFile := os.Getenv("MAPPING_FILE")

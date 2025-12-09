@@ -266,6 +266,31 @@ paths:
         '500':
           description: Server error (e.g., database unavailable).
 
+  /_matrix/push/v1/notify:
+    post:
+      summary: Matrix Push Gateway Notify
+      operationId: matrixPushNotify
+      description: |
+        Endpoint used by a Matrix homeserver (push gateway) to deliver push notifications
+        to this proxy. The proxy will translate Matrix notifications into Acrobits PNM
+        requests and return any rejected pushkeys in the response.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MatrixPushNotifyRequest'
+      responses:
+        '200':
+          description: Notification processed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MatrixPushNotifyResponse'
+        '400':
+          description: Invalid request payload
+        '500':
+          description: Server error while processing notification
 components:
   schemas:
     SMS:
@@ -352,6 +377,59 @@ components:
           type: string
           format: date-time
           description: When the mapping was last written.
+        MatrixPushNotifyRequest:
+          type: object
+          properties:
+            notification:
+              $ref: '#/components/schemas/MatrixNotification'
+        MatrixNotification:
+          type: object
+          properties:
+            event_id:
+              type: string
+            room_id:
+              type: string
+            type:
+              type: string
+            sender:
+              type: string
+            sender_display_name:
+              type: string
+            content:
+              type: object
+              additionalProperties: true
+            counts:
+              $ref: '#/components/schemas/MatrixCounts'
+            devices:
+              type: array
+              items:
+                $ref: '#/components/schemas/MatrixDevice'
+        MatrixCounts:
+          type: object
+          properties:
+            unread:
+              type: integer
+            missed_calls:
+              type: integer
+        MatrixDevice:
+          type: object
+          properties:
+            app_id:
+              type: string
+            pushkey:
+              type: string
+            pushkey_ts:
+              type: integer
+            tweaks:
+              type: object
+              additionalProperties: true
+        MatrixPushNotifyResponse:
+          type: object
+          properties:
+            rejected:
+              type: array
+              items:
+                type: string
     PushTokenReportRequest:
       type: object
       required:

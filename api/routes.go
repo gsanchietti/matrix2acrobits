@@ -15,8 +15,8 @@ import (
 const adminTokenHeader = "X-Super-Admin-Token"
 
 // RegisterRoutes wires API endpoints to Echo handlers.
-func RegisterRoutes(e *echo.Echo, svc *service.MessageService, adminToken string, pushTokenDB interface{}) {
-	h := handler{svc: svc, adminToken: adminToken, pushTokenDB: pushTokenDB}
+func RegisterRoutes(e *echo.Echo, svc *service.MessageService, pushSvc *service.PushService, adminToken string, pushTokenDB interface{}) {
+	h := handler{svc: svc, pushSvc: pushSvc, adminToken: adminToken, pushTokenDB: pushTokenDB}
 	e.POST("/api/client/send_message", h.sendMessage)
 	e.POST("/api/client/fetch_messages", h.fetchMessages)
 	e.POST("/api/client/push_token_report", h.pushTokenReport)
@@ -24,10 +24,14 @@ func RegisterRoutes(e *echo.Echo, svc *service.MessageService, adminToken string
 	e.GET("/api/internal/map_number_to_matrix", h.getMapping)
 	e.GET("/api/internal/push_tokens", h.getPushTokens)
 	e.DELETE("/api/internal/push_tokens", h.resetPushTokens)
+
+	// Matrix Push Gateway API
+	e.POST("/_matrix/push/v1/notify", h.matrixPushNotify)
 }
 
 type handler struct {
 	svc         *service.MessageService
+	pushSvc     *service.PushService
 	adminToken  string
 	pushTokenDB interface{}
 }
@@ -232,4 +236,28 @@ func (h handler) isLocalhost(ip string) bool {
 	default:
 		return false
 	}
+}
+
+func (h handler) matrixPushNotify(c echo.Context) error {
+	var req models.MatrixPushNotifyRequest
+	if err := c.Bind(&req); err != nil {
+		logger.Warn().Str("endpoint", "matrix_push_notify").Err(err).Msg("invalid request payload")
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid payload")
+	}
+
+	logger.Debug().Str("endpoint", "matrix_push_notify").Int("device_count", len(req.Notification.Devices)).Str("event_id", req.Notification.EventID).Msg("processing matrix push notification")
+
+	if h.pushSvc == nil {
+		logger.Error().Str("endpoint", "matrix_push_notify").Msg("push service not initialized")
+		return echo.NewHTTPError(http.StatusInternalServerError, "push service not available")
+	}
+
+	resp, err := h.pushSvc.HandleMatrixPushNotification(c.Request().Context(), &req)
+	if err != nil {
+		logger.Error().Str("endpoint", "matrix_push_notify").Err(err).Msg("failed to handle matrix push notification")
+		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+	}
+
+	logger.Info().Str("endpoint", "matrix_push_notify").Int("rejected_count", len(resp.Rejected)).Msg("matrix push notification processed")
+	return c.JSON(http.StatusOK, resp)
 }
